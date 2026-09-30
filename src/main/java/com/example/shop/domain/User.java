@@ -42,6 +42,10 @@ public class User implements Serializable {
     public void setResetPasswordExpiresAt(java.time.Instant value){resetPasswordExpiresAt=value;}
     public java.time.Instant getVerificationExpiresAt(){return verificationExpiresAt;}
     public void setVerificationExpiresAt(java.time.Instant value){verificationExpiresAt=value;}
+    /** When a verification e-mail was last issued; null when none is outstanding. */
+    private java.time.Instant verificationSentAt;
+    public java.time.Instant getVerificationSentAt(){return verificationSentAt;}
+    public void setVerificationSentAt(java.time.Instant value){verificationSentAt=value;}
 
     // Dùng cho chức năng Xác thực Email
     @Column(name = "verification_code", length = 64)

@@ -8,10 +8,11 @@ Gọi `GET /auth/csrf`, giữ cookie và đọc `{headerName,token}`. Gửi toke
 
 | Method | Route | Nội dung |
 |---|---|---|
-| POST | /auth/register | firstName,lastName,email,password,confirmPassword |
+| POST | /auth/register | firstName,lastName,email,password,confirmPassword. Tài khoản được lưu trước khi gửi mail; lỗi SMTP chỉ ghi log WARN (không có mã) và vẫn trả 201. Email đã có tài khoản chờ xác minh mà link quá 24 giờ thì đăng ký lại được (thay họ tên, mật khẩu và mã); tài khoản đã xác minh, bị khóa hoặc bị admin vô hiệu hóa vẫn báo trùng |
 | POST | /auth/login | email,password → thông tin người dùng |
 | POST | /auth/logout | Kết thúc phiên |
 | GET | /auth/me | Thông tin phiên hiện tại |
+| POST | /auth/resend-verification | `{ "email": "..." }`. Cấp mã mới 24 giờ và gửi lại cho tài khoản đang chờ xác minh, tối đa 1 lần mỗi 60 giây mỗi tài khoản (`verification_sent_at`). Luôn trả 200 cùng một thông điệp, dù email không tồn tại, đã xác minh, bị khóa hay đang bị giới hạn. Mã cũ hết hiệu lực khi cấp mã mới; yêu cầu CSRF |
 | POST | /auth/verify | JSON `{ "code": "..." }`; token 24 giờ, dùng một lần; yêu cầu CSRF |
 | POST | /auth/forgot-password | email; phản hồi không tiết lộ email tồn tại |
 | POST | /auth/reset-password | token,password,confirmPassword; hạn 1 giờ |

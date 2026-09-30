@@ -15,11 +15,23 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
 import java.io.UnsupportedEncodingException;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserService {
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
+    private static final long VERIFICATION_VALID_SECONDS = 86400;
+    private static final long RESEND_INTERVAL_SECONDS = 60;
+
+    /** Everything needed to e-mail a verification link. The code itself is never logged. */
+    public record VerificationIssue(long userId, String email, String fullName, String code) {}
+
     @org.springframework.beans.factory.annotation.Value("${shop.mail-from:no-reply@techshop.example}")
     private String mailFrom;
     private final UserRepository userRepository;
@@ -27,15 +39,17 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender; // 1. Thêm JavaMailSender
     private final OrderRepository orderRepository;
+    private final Clock clock;
 
     // Cập nhật Constructor để Inject JavaMailSender
     public UserService(UserRepository userRepository, RoleRepository roleRepository,
-            PasswordEncoder passwordEncoder, JavaMailSender mailSender, OrderRepository orderRepository) {
+            PasswordEncoder passwordEncoder, JavaMailSender mailSender, OrderRepository orderRepository, Clock clock) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.mailSender = mailSender;
         this.orderRepository = orderRepository;
+        this.clock = clock;
     }
 
     // Lưu thông tin người dùng vào cơ sở dữ liệu
@@ -52,7 +66,7 @@ public class UserService {
 
         // --- THÊM MỚI ---
         user.setVerificationCode(UUID.randomUUID().toString()); // Tạo mã xác thực
-        user.setVerificationExpiresAt(java.time.Instant.now().plusSeconds(86400));
+        user.setVerificationExpiresAt(clock.instant().plusSeconds(86400));
         user.setEnabled(false); // Mặc định chưa kích hoạt
         // ----------------
 
@@ -61,10 +75,85 @@ public class UserService {
 
     // --- CÁC HÀM MỚI CHO CHỨC NĂNG XÁC THỰC EMAIL ---
 
+    /**
+     * Registers a new account, or restarts an unverified one whose link has expired (the old
+     * name, password and code are replaced). The account keeps the one-minute resend slot claimed
+     * until {@link #releaseVerificationSlot} is called after a failed send.
+     */
+    @Transactional
+    public VerificationIssue register(String firstName, String lastName, String email, String rawPassword) {
+        Instant now = clock.instant();
+        User user = userRepository.existsByEmail(email) ? userRepository.lockByEmail(email) : null;
+        if (user == null) {
+            user = new User();
+            user.setEmail(email);
+            user.setRole(roleRepository.findByName("USER"));
+        } else if (!isExpiredPendingRegistration(user, now)) {
+            throw new IllegalArgumentException("Email đã được sử dụng");
+        }
+        user.setFullName(firstName + " " + lastName);
+        user.setPassword(passwordEncoder.encode(rawPassword));
+        user.setEnabled(false);
+        return issue(user, now);
+    }
+
+    /**
+     * Issues a fresh code for a registration that is still waiting for verification, at most once
+     * a minute. Returns null when nothing should be sent, so callers cannot tell the reasons apart.
+     */
+    @Transactional
+    public VerificationIssue issueVerificationResend(String email) {
+        if (email == null || !userRepository.existsByEmail(email)) return null;
+        Instant now = clock.instant();
+        User user = userRepository.lockByEmail(email);
+        if (user == null || !isPendingRegistration(user)) return null;
+        Instant last = user.getVerificationSentAt();
+        if (last != null && last.plusSeconds(RESEND_INTERVAL_SECONDS).isAfter(now)) return null;
+        return issue(user, now);
+    }
+
+    private VerificationIssue issue(User user, Instant now) {
+        String code = UUID.randomUUID().toString();
+        user.setVerificationCode(code);
+        user.setVerificationExpiresAt(now.plusSeconds(VERIFICATION_VALID_SECONDS));
+        user.setVerificationSentAt(now);
+        user = userRepository.save(user);
+        return new VerificationIssue(user.getId(), user.getEmail(), user.getFullName(), code);
+    }
+
+    /** An account created by registration that has not been verified. Admin-disabled accounts have no code. */
+    private static boolean isPendingRegistration(User user) {
+        return !user.isEnabled() && !user.getIsLocked() && user.getVerificationCode() != null;
+    }
+
+    private static boolean isExpiredPendingRegistration(User user, Instant now) {
+        return isPendingRegistration(user)
+                && (user.getVerificationExpiresAt() == null || user.getVerificationExpiresAt().isBefore(now));
+    }
+
+    /** Lets the user retry immediately after the e-mail could not be handed to the mail server. */
+    public void releaseVerificationSlot(long userId) {
+        userRepository.clearVerificationSentAt(userId);
+    }
+
+    /** Sends the verification e-mail; a mail failure is logged and reported, never thrown. */
+    public boolean sendVerificationQuietly(VerificationIssue issue, String siteURL) {
+        try {
+            sendVerificationEmail(issue.email(), issue.fullName(), issue.code(), siteURL);
+            return true;
+        } catch (Exception e) {
+            Throwable cause = e;
+            while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+            log.warn("Could not send the verification e-mail for user {}: {}: {}", issue.userId(),
+                    cause.getClass().getSimpleName(), cause.getMessage());
+            releaseVerificationSlot(issue.userId());
+            return false;
+        }
+    }
+
     // Gửi email xác thực đăng ký
-    public void sendVerificationEmail(User user, String siteURL)
+    public void sendVerificationEmail(String toAddress, String fullName, String code, String siteURL)
             throws MessagingException, UnsupportedEncodingException {
-        String toAddress = user.getEmail();
         String fromAddress = mailFrom;
         String senderName = "TechShop Support";
         String subject = "Vui lòng xác thực đăng ký tài khoản";
@@ -81,8 +170,8 @@ public class UserService {
         helper.setTo(toAddress);
         helper.setSubject(subject);
 
-        content = content.replace("[[name]]", org.springframework.web.util.HtmlUtils.htmlEscape(user.getFullName()));
-        String verifyURL = siteURL + "/verify?code=" + user.getVerificationCode();
+        content = content.replace("[[name]]", org.springframework.web.util.HtmlUtils.htmlEscape(fullName == null ? "" : fullName));
+        String verifyURL = siteURL + "/verify?code=" + code;
         content = content.replace("[[URL]]", verifyURL);
 
         helper.setText(content, true);
@@ -94,7 +183,7 @@ public class UserService {
     public boolean verify(String verificationCode) {
         User user = userRepository.lockByVerificationCode(verificationCode);
 
-        if (user == null || user.isEnabled() || user.getVerificationExpiresAt()==null || user.getVerificationExpiresAt().isBefore(java.time.Instant.now())) {
+        if (user == null || user.isEnabled() || user.getVerificationExpiresAt()==null || user.getVerificationExpiresAt().isBefore(clock.instant())) {
             return false; // Code sai hoặc đã kích hoạt rồi
         } else {
             user.setVerificationCode(null); // Xóa code đi
@@ -111,7 +200,7 @@ public class UserService {
         User user = userRepository.findByEmail(email);
         if (user != null) {
             user.setResetPasswordToken(token);
-            user.setResetPasswordExpiresAt(java.time.Instant.now().plusSeconds(3600));
+            user.setResetPasswordExpiresAt(clock.instant().plusSeconds(3600));
             userRepository.save(user);
         } else {
             throw new Exception("Không tìm thấy email: " + email);
@@ -123,7 +212,7 @@ public class UserService {
     public User getByResetPasswordToken(String token) {
         if(token==null || token.isBlank())return null;
         User user=userRepository.lockByResetToken(token);
-        return user!=null && user.getResetPasswordExpiresAt()!=null && user.getResetPasswordExpiresAt().isAfter(java.time.Instant.now())?user:null;
+        return user!=null && user.getResetPasswordExpiresAt()!=null && user.getResetPasswordExpiresAt().isAfter(clock.instant())?user:null;
     }
 
     // 3. Cập nhật mật khẩu mới và xóa token

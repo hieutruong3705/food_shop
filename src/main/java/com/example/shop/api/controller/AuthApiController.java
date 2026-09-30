@@ -9,7 +9,6 @@ import com.example.shop.api.dto.auth.ResetPasswordRequest;
 import com.example.shop.api.dto.auth.UserResponse;
 import com.example.shop.api.exception.ResourceNotFoundException;
 import com.example.shop.domain.User;
-import com.example.shop.domain.dto.RegisterDTO;
 import com.example.shop.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -48,16 +47,26 @@ public class AuthApiController {
         this.authenticationManager = authenticationManager;
     }
 
+    static final String REGISTERED = "Đăng ký thành công. Vui lòng kiểm tra email để xác minh. Nếu không nhận được email, hãy yêu cầu gửi lại.";
+    /** Identical for every outcome so the response never reveals whether an e-mail address is registered. */
+    static final String VERIFICATION_RESENT = "Nếu tài khoản đang chờ xác minh, chúng tôi đã gửi lại email xác minh. Nếu không nhận được email, hãy thử lại sau ít phút.";
+
+    /** The account is stored before the e-mail is sent, so a mail outage must not turn into a 500. */
     @PostMapping("/register")
     public ResponseEntity<Map<String, String>> register(@Valid @RequestBody RegisterRequest request,
-            HttpServletRequest servletRequest) throws Exception {
-        if (userService.checkEmailExists(request.email())) throw new IllegalArgumentException("Email đã được sử dụng");
+            HttpServletRequest servletRequest) {
         if (!request.password().equals(request.confirmPassword())) throw new IllegalArgumentException("Mật khẩu xác nhận không khớp");
-        RegisterDTO dto = new RegisterDTO();
-        dto.setFirstName(request.firstName()); dto.setLastName(request.lastName()); dto.setEmail(request.email()); dto.setPassword(request.password());
-        User user = userService.registerUser(userService.registerDTOtoUser(dto));
-        userService.sendVerificationEmail(user, clientBaseUrl(servletRequest));
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Đăng ký thành công. Vui lòng kiểm tra email để xác minh."));
+        var issued = userService.register(request.firstName(), request.lastName(), request.email(), request.password());
+        userService.sendVerificationQuietly(issued, clientBaseUrl(servletRequest));
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", REGISTERED));
+    }
+
+    public record ResendRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Email @jakarta.validation.constraints.Size(max = 254) String email) {}
+    @PostMapping("/resend-verification")
+    public Map<String, String> resendVerification(@Valid @RequestBody ResendRequest request, HttpServletRequest servletRequest) {
+        var issued = userService.issueVerificationResend(request.email());
+        if (issued != null) userService.sendVerificationQuietly(issued, clientBaseUrl(servletRequest));
+        return Map.of("message", VERIFICATION_RESENT);
     }
 
     @PostMapping("/login")

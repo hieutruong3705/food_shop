@@ -3,6 +3,7 @@ package com.example.shop;
 import com.example.shop.config.TimeConfig;
 import com.example.shop.domain.*;
 import com.example.shop.repository.*;
+import com.example.shop.support.MovableClock;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -15,8 +16,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import java.time.Clock;
-import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -38,18 +37,9 @@ class FixedClockTests {
     static final ZoneId ZONE = TimeConfig.SHOP_ZONE;
     static final ZonedDateTime MIDNIGHT = ZonedDateTime.of(2026, 10, 1, 0, 0, 0, 0, ZONE);
 
-    /** Clock whose instant the test moves. */
-    static class MovableClock extends Clock {
-        private volatile Instant now = MIDNIGHT.plusMinutes(1).toInstant();
-        void set(ZonedDateTime value) { now = value.toInstant(); }
-        @Override public ZoneId getZone() { return ZONE; }
-        @Override public Clock withZone(ZoneId zone) { return this; }
-        @Override public Instant instant() { return now; }
-    }
-
     @TestConfiguration
     static class ClockConfig {
-        @Bean @Primary MovableClock movableClock() { return new MovableClock(); }
+        @Bean @Primary MovableClock movableClock() { return new MovableClock(MIDNIGHT.plusMinutes(1).toInstant()); }
     }
 
     @Autowired MovableClock clock;
@@ -118,17 +108,17 @@ class FixedClockTests {
         String voucherCode = voucher.getCode();
         cleanup.add(() -> vouchers.deleteById(voucherId));
 
-        clock.set(MIDNIGHT.minusMinutes(1));
+        clock.set(MIDNIGHT.minusMinutes(1).toInstant());
         assertThat(listsPromotion(promotionId)).as("/offers promotion at 23:59").isFalse();
         assertThat(listsVoucher(voucherCode)).as("/offers voucher at 23:59").isFalse();
         assertThat(filteredCount(promotionId)).as("promotionId filter at 23:59").isZero();
 
-        clock.set(MIDNIGHT.plusMinutes(1));
+        clock.set(MIDNIGHT.plusMinutes(1).toInstant());
         assertThat(listsPromotion(promotionId)).as("/offers promotion at 00:01").isTrue();
         assertThat(listsVoucher(voucherCode)).as("/offers voucher at 00:01").isTrue();
         assertThat(filteredCount(promotionId)).as("promotionId filter at 00:01").isEqualTo(1);
 
-        clock.set(MIDNIGHT.plusDays(1).plusMinutes(1));
+        clock.set(MIDNIGHT.plusDays(1).plusMinutes(1).toInstant());
         assertThat(listsPromotion(promotionId)).as("/offers promotion after the end").isFalse();
         assertThat(listsVoucher(voucherCode)).as("/offers voucher after the end").isFalse();
         assertThat(filteredCount(promotionId)).as("promotionId filter after the end").isZero();

@@ -20,6 +20,12 @@ public interface UserRepository extends JpaRepository<User, Long>, org.springfra
     @Query("select u from User u where u.verificationCode = :code")
     User lockByVerificationCode(@Param("code") String code);
 
+    /** Targeted update so a failed send cannot overwrite a newer code with stale entity state. */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("update User u set u.verificationSentAt = null where u.id = :id")
+    void clearVerificationSentAt(@Param("id") long id);
+
     List<User> findByRole(Role role);
 
     List<User> findByFullNameContainingIgnoreCaseOrEmailContainingIgnoreCase(String name, String email);

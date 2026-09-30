@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "../stores/auth";
 import { api, clearCsrf } from "../services/api";
@@ -16,6 +16,7 @@ const route = useRoute(),
     confirmPassword: "",
   });
 const { busy, error, message, run } = useTask();
+const resendEmail = ref("");
 const mode = computed(() => route.path.slice(1)),
   titles = {
     login: "Chào mừng trở lại",
@@ -29,6 +30,7 @@ watch(
   () => {
     error.value = "";
     message.value = "";
+    resendEmail.value = "";
     form.password = "";
     form.confirmPassword = "";
     if (mode.value === "verify")
@@ -43,6 +45,15 @@ watch(
   },
   { immediate: true },
 );
+function resend(email) {
+  run(async () => {
+    const r = await api("/auth/resend-verification", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+    message.value = r.message;
+  });
+}
 function submit() {
   run(async () => {
     if (mode.value === "login") {
@@ -127,6 +138,29 @@ function submit() {
           }}
           →
         </button>
+      </form>
+      <button
+        v-if="(mode === 'register' && message) || (mode === 'login' && error && form.email)"
+        type="button"
+        class="secondary"
+        :disabled="busy"
+        @click="resend(form.email)"
+      >
+        Gửi lại email xác minh
+      </button>
+      <form
+        v-if="mode === 'verify' && error"
+        class="form"
+        @submit.prevent="resend(resendEmail)"
+      >
+        <label
+          >Email đã đăng ký<input
+            v-model="resendEmail"
+            type="email"
+            autocomplete="email"
+            maxlength="254"
+            required /></label
+        ><button :disabled="busy">Gửi lại email xác minh</button>
       </form>
       <div class="auth-links">
         <RouterLink v-if="mode !== 'login'" to="/login">Đăng nhập</RouterLink
