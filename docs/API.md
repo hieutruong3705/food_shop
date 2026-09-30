@@ -35,7 +35,11 @@ Mã xác minh email và token đặt lại mật khẩu là 256 bit ngẫu nhiê
 
 ## Mua hàng
 
-`GET /catalog/menu?categoryId=...` trả facets cùng `bestSellers: [{product,units}]` và `rankingSource: sales|newest`. Tổng bán từ order_details của đơn CONFIRMED/SHIPPING/COMPLETED, COD hoặc PAID, giới hạn 10 trong query repository. `GET /offers` trả promotion/voucher đủ điều kiện công khai; `GET /products?promotionId=...` lọc sản phẩm áp dụng (kết hợp với category/brand/stock/spec/price).
+`GET /catalog/menu?categoryId=...` trả facets cùng `bestSellers: [{product,units}]` (tối đa 10; **rỗng** khi danh mục chưa có đơn) và `newest: [{product,units:0}]` (5 sản phẩm mới nhất đang bán, còn hàng trước). `rankingSource: sales|newest` chỉ giữ cho client cũ. Tổng bán từ order_details của đơn CONFIRMED/SHIPPING/COMPLETED, COD hoặc PAID.
+
+`GET /home` (công khai) trả các khối trang chủ: `promotion` (khuyến mãi đang chạy có tỉ lệ cao nhất còn sản phẩm bán, kèm `products` tối đa 8, `endDate`, `scopeDescription`; `null` nếu không có), `brands` (hãng có sản phẩm bán, kèm `count`), `bestSellers` (8, cùng cách đếm với menu), `categoryRows` (3 danh mục nhiều sản phẩm bán nhất × 4 sản phẩm), `reviews` (4 đánh giá 4–5 sao mới nhất: `rating,content,author,productId,productName,createdAt`, không có email). Kết quả được giữ `shop.home-cache-seconds` giây (mặc định 30; profile test/e2e đặt 0). Mỗi dòng của `GET /cart` có `price` (giá hiện tại, đã trừ khuyến mãi), `listPrice` (giá niêm yết), `discountRate` (% khuyến mãi đang áp dụng, 0 nếu không) và `addedPrice` (giá lúc khách thêm vào giỏ; giao diện báo nếu khác `price`).
+
+`GET /offers` trả promotion/voucher đủ điều kiện công khai; `GET /products?promotionId=...` lọc sản phẩm áp dụng (kết hợp với category/brand/stock/spec/price).
 
 `GET /offers` trả toàn bộ mã đủ điều kiện để luân phiên (không cắt còn 6 mã). Promotion có thêm `hasAvailableProducts`: false khi các sản phẩm áp dụng chưa mở bán; vẫn trả mức giảm của chương trình active, còn hạn và có cấu hình phạm vi. Giao diện hiện trạng thái này và không dẫn đến danh sách rỗng. Giá bán/checkout vẫn tính theo sản phẩm và kiểm tra điều kiện ở backend.
 
@@ -80,17 +84,17 @@ Bộ lọc: `brandIds=1&brandIds=2`, `spec.RAM=16%20GB&spec.RAM=32%20GB&spec.CPU
 
 Nếu có `cartItemIds`, chỉ mua các dòng được chọn và giữ các dòng còn lại trong giỏ. ID phải thuộc giỏ hiện tại, không trùng, tối đa 100 dòng. Bỏ trường này để mua toàn bộ giỏ.
 
-Phân trang sản phẩm mặc định 12, tối đa 60. `sort`: newest, popular, price-asc, price-desc. Bộ lọc/sắp xếp giá dùng giá niêm yết; giá sau khuyến mãi có trong response. Page trả `content,totalElements,totalPages,number,first,last`.
+Phân trang sản phẩm mặc định 12, tối đa 60. `sort`: newest, popular, price-asc, price-desc. `popular` xếp theo số lượng bán trong đơn CONFIRMED/SHIPPING/COMPLETED đã trả tiền hoặc COD (giống menu và `/home`), không dùng cột `products.sold`. Bộ lọc/sắp xếp giá dùng giá niêm yết; giá sau khuyến mãi có trong response. Page trả `content,totalElements,totalPages,number,first,last`.
 
 ## Quy tắc tiền (chờ xác nhận)
 
-Ba quy tắc dưới đây là hành vi hiện tại của `CommerceService`, được ghi lại bằng test tham số hóa trong `CommerceApiTests` (tên test nêu đúng quy tắc). Chưa có quyết định của chủ dự án nên **chưa đổi code**; nếu đổi quy tắc, sửa test tương ứng trước.
+Quy tắc 1 và 2 dưới đây là hành vi hiện tại của `CommerceService`, được ghi lại bằng test tham số hóa trong `CommerceApiTests` (tên test nêu đúng quy tắc). Chưa có quyết định của chủ dự án nên **chưa đổi code**; nếu đổi quy tắc, sửa test tương ứng trước.
 
 | # | Quy tắc hiện tại | Ví dụ | Trạng thái |
 | --- | --- | --- | --- |
 | 1 | Đơn tối thiểu của voucher so với **tổng toàn bộ các dòng được chọn**, không phải tổng các dòng đủ điều kiện. Mức giảm chỉ tính trên các dòng đủ điều kiện. | Voucher Laptop 10%, tối thiểu 5.000.000₫. Giỏ gồm laptop 1.000.000₫ và một món khác 4.000.000₫ vẫn được áp dụng, giảm 100.000₫. Món khác 3.999.999₫ thì bị từ chối | Chờ xác nhận |
 | 2 | Miễn phí vận chuyển khi **tổng trước khi trừ voucher** từ 1.000.000₫; ngược lại phí 30.000₫. | Đơn 1.050.000₫ trừ voucher 10% còn 945.000₫ vẫn miễn phí ship. Đơn 999.999₫ trả 30.000₫ | Chờ xác nhận |
-| 3 | Lượt dùng voucher (`usedCount`) **không giảm** khi đơn bị hủy hoặc thanh toán thất bại. | Voucher giới hạn 1 lượt: khách A đặt rồi hủy, khách B vẫn bị báo hết lượt | Chờ xác nhận |
+| 3 | Lượt dùng voucher (`usedCount`) **được hoàn lại một lần** khi đơn bị hủy, thanh toán thất bại hoặc hết hạn thanh toán (đổi ngày 2026-09-30, theo `docs/PLAN-UI-REVIEW.md` L1). | Voucher giới hạn 1 lượt: khách A đặt rồi hủy, khách B dùng được | Đã đổi, cần chủ dự án xác nhận |
 
 Đọc giỏ hàng, báo giá và danh sách/chi tiết đơn (`GET /cart`, `GET /cart/quote`, `GET /orders`, `GET /orders/{id}`) chạy `readOnly` và không dùng `SELECT ... FOR UPDATE`; `GET /cart` không tạo giỏ hàng mới. Báo giá chỉ để hiển thị: checkout khóa lại người mua, voucher và sản phẩm rồi kiểm tra từ đầu. `POST /cart/items`, `PATCH/DELETE /cart/items/{id}`, `POST /orders` và đổi trạng thái đơn vẫn khóa như trước.
 
@@ -116,10 +120,10 @@ Toàn bộ nghiệp vụ đi qua `/api/v1`; route giao diện trả Vue `index.h
 
 - Product: name,sku,slug,price,quantity,warrantyMonths,categoryId,brandId,shortDesc,detailDesc,images (list URL),specs (list name/value),active,technologyCatalog. Xóa sản phẩm là ngừng bán.
 - Category: name,description,image,brandIds. Product phải chọn brand thuộc category đã gán; không bỏ quan hệ đang được sản phẩm sử dụng.
-- Promotion: name,description,discountRate,startDate/endDate (ISO instant),scopeType,categoryIds,productIds,brandIds,active.
-- Voucher: code,discount (%),scopeType,categoryIds,brandIds,productIds,active,startDate/endDate (ISO instant hoặc null),minimumOrder (VND),maximumDiscount (VND hoặc null),usageLimit (số nguyên dương hoặc null). `usedCount` chỉ đọc, không nhận từ client. Khóa voucher trong transaction; đơn thành công tiêu thụ một lượt, retry không tăng lượt, hủy đơn không hoàn lượt. Minimum áp dụng trên subtotal sau khuyến mãi; giảm phần trăm trên các dòng thuộc scope, tối đa maximumDiscount nếu có. `all` còn được trả để tương thích client cũ.
+- Promotion: name,description,discountRate,startDate/endDate (ISO instant),scopeType (ALL, CATEGORY, BRAND, PRODUCT),categoryIds,productIds,brandIds,active. Phản hồi có thêm `scopeDescription`. `POST/PUT /admin/promotions` trả `{id, warnings: [...]}`; `warnings` liệt kê khuyến mãi đang bật trùng phạm vi và thời gian (không chặn lưu). Danh sách admin: sản phẩm có `categoryName`, `brandName`, `discountRate`, `promotionName`; danh mục và thương hiệu có `productCount` (tất cả sản phẩm, kể cả ngừng bán).
+- Voucher: code,discount (%),scopeType,categoryIds,brandIds,productIds,active,startDate/endDate (ISO instant hoặc null),minimumOrder (VND),maximumDiscount (VND hoặc null),usageLimit (số nguyên dương hoặc null). `usedCount` chỉ đọc, không nhận từ client. Khóa voucher trong transaction; đơn thành công tiêu thụ một lượt, retry không tăng lượt, hủy đơn, thanh toán thất bại hoặc hết hạn hoàn lại một lượt. Minimum áp dụng trên subtotal sau khuyến mãi; giảm phần trăm trên các dòng thuộc scope, tối đa maximumDiscount nếu có. `all` còn được trả để tương thích client cũ.
 - Scope chung: ALL/CATEGORY/BRAND/PRODUCT; non-ALL phải có ID tồn tại, OR trong cùng danh sách, xóa danh sách không tương ứng. Chi tiết và ví dụ: [CATEGORY-BRAND-SCOPES.md](CATEGORY-BRAND-SCOPES.md).
-- `GET /admin/options/{resource}`: brands/categories/products, tìm `search`, phân trang `page` (20 mục), `ids` nạp lại nhãn; brands có `categoryId` để giới hạn hãng được gán. Chỉ ADMIN.
+- `GET /admin/options/{resource}`: brands/categories/products, tìm `search`, phân trang `page` (20 mục), `ids` nạp lại nhãn. categories và brands trả thêm `image` và `productCount` (số sản phẩm đang bán); products lọc theo `categoryId` hoặc `brandId` và trả `categoryId`, `brandId`, `active`; brands còn nhận `categoryId`/`categoryIds` để giới hạn hãng được gán. Chỉ ADMIN.
 - `/catalog/facets` thêm minWarranty/maxWarranty; `/products` nhận minWarranty/maxWarranty (tháng), promotionId lọc theo đủ bốn scope; `/offers` trả scopeType/scopeNames.
 - User: chỉ cập nhật role,enabled,locked; không đổi chính tài khoản đang dùng. Chỉ xóa được tài khoản chưa có đơn hoặc ràng buộc liên quan.
 - Review: danh sách/xóa; không tạo/sửa đánh giá thay khách.

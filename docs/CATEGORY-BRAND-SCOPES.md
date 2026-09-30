@@ -75,3 +75,14 @@ Vue là giao diện đang hoạt động; không sửa template JSP đã lưu tr
 - Kiểm thử legacy migration MySQL riêng: đạt V1 → V6, kiểm tra dữ liệu cũ/backfill/tách khuyến mãi và migrate lần hai không thay đổi; log `data/scope-migration-test.log`.
 - Frontend build và JAR package đạt: `data/scope-build-final.log`, `data/scope-package-final.log`.
 - Lượt browser đầy đủ: 13 ca cũ đạt, phát hiện lỗi padding chung làm lệch nút kéo bảo hành. Đã sửa CSS và chạy lại ca scope/drag đạt (1/1). Log `data/scope-e2e-final.log`, `data/scope-e2e-retest.log`. Các lượt E2E tiếp theo dùng DB H2 riêng theo P0 của [ARCHITECTURE-IMPLEMENTATION.md](ARCHITECTURE-IMPLEMENTATION.md).
+
+## Quy tắc chốt ngày 30/09/2026 (ma trận hãng ↔ danh mục)
+
+Ghim bằng `BrandCategoryFlowTests` (xem `docs/PLAN-UI-REVIEW.md` mục 5):
+
+- Xóa hãng còn sản phẩm: bị chặn, thông báo nêu tên sản phẩm (dòng 8).
+- Hãng đã gán cho danh mục nhưng mọi sản phẩm đã ngừng bán: vẫn hiện ở bộ lọc và menu với số lượng 0, để admin thấy hãng còn gán; muốn ẩn thì bỏ gán trong Quản trị → Danh mục (dòng 9).
+- Đổi tên danh mục/hãng không ảnh hưởng ưu đãi, vì phạm vi lưu theo ID (dòng 10).
+- Khuyến mãi theo hãng tự áp dụng cho sản phẩm thêm sau (dòng 11); chuyển sản phẩm sang danh mục khác thì mất khuyến mãi theo danh mục cũ (dòng 12).
+- Hai khuyến mãi cùng phủ một sản phẩm: chỉ lấy tỉ lệ cao nhất, không cộng dồn; nhãn hiện tên khuyến mãi đó (dòng 13).
+- Danh mục chưa gán hãng: menu trả danh sách hãng rỗng và giao diện hiện "Danh mục chưa gán thương hiệu" (dòng 15).

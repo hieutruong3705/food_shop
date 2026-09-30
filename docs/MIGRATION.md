@@ -157,7 +157,7 @@ DONE = có và kiểm tra cục bộ; PARTIAL = còn phần chưa kiểm chứng
 - Session HttpOnly, CSRF, CORS theo CLIENT_URL; backend kiểm tra role/trạng thái tài khoản và ownership. JSON lỗi 401/403 thay redirect JSP.
 - Checkout đọc lại giá/kho, tính promotion/voucher/shipping, snapshot tên/SKU/giá; khóa người mua/sản phẩm, refresh locking read phù hợp MySQL REPEATABLE READ. Retry cùng key/payload trả cùng đơn, không trừ kho hai lần; payload khác bị từ chối.
 - Thêm ghi chú giao hàng tối đa 1.000 ký tự, lưu/hiển thị ở khách và admin.
-- Voucher có active, ngày hiệu lực, minimumOrder, maximumDiscount, usageLimit/usedCount. Khóa voucher chống vượt lượt khi đặt đồng thời. Chỉ tăng lượt khi commit thành công; retry không tăng lại. Hủy/thanh toán thất bại không hoàn lượt. Giữ model giảm phần trăm, không tự thêm fixed discount.
+- Voucher có active, ngày hiệu lực, minimumOrder, maximumDiscount, usageLimit/usedCount. Khóa voucher chống vượt lượt khi đặt đồng thời. Chỉ tăng lượt khi commit thành công; retry không tăng lại. Hủy/thanh toán thất bại/hết hạn thanh toán hoàn lại một lượt (từ 2026-09-30). Giữ model giảm phần trăm, không tự thêm fixed discount.
 - Hoàn thiện sửa/xóa đánh giá của chính khách. Public DTO không lộ email. Sửa lỗi form mất nội dung trong lúc sản phẩm liên quan đang tải.
 - Upload kiểm tra chữ ký, MIME, extension, kích thước, tên/đường dẫn an toàn. Lỗi query/upload/tranh chấp/server có JSON tiếng Việt, không trả stack trace.
 - Sửa tràn ngang dashboard mobile. Trang chủ có danh sách nổi bật/mới từ API.

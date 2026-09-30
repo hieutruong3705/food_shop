@@ -73,7 +73,7 @@ Lượt kiểm thử biến thể dùng instance riêng `mysql-variants-test`: t
 
 Backend hiện chỉ dùng REST controller cho nghiệp vụ. MVC/JSP và các service riêng của luồng cũ đã chuyển sang `legacy/spring-mvc`, không biên dịch hoặc đóng gói vào JAR. `SpaController` chỉ phục vụ Vue. File `UserController.java` cũ được lưu ở thư mục này; chức năng quản trị người dùng hiện nằm trong `api/controller/AdminApiController.java` và `api/service/AdminCatalogService.java`.
 
-Frontend build mặc định dùng `vite.rest.config.js` và `main-rest.js`; các trang nối API hiện có được giữ. Bộ scaffold TypeScript được thêm độc lập vẫn giữ trên đĩa, không đưa các trang mock vào bản triển khai. Xem `frontend/README.md` để phân biệt hai entry.
+Frontend build dùng `vite.config.js` với entry `src/main-rest.js`. Bộ scaffold TypeScript/Tailwind và các trang mock cũ đã được xóa (30/09/2026). Xem `frontend/README.md`.
 
 Nhãn khuyến mãi hiển thị phần trăm cụ thể (ví dụ **Giảm 5%**) trên thẻ sản phẩm và chi tiết, tính từ giá niêm yết/giá sau giảm do API trả về; khi chọn phiên bản, nhãn cập nhật theo giá phiên bản.
 

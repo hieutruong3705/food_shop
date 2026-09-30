@@ -16,7 +16,7 @@ Nguồn yêu cầu gốc: `data/architecture-review-content.txt` (mục 7, promp
 | **P6** toàn vẹn dữ liệu admin, dashboard | **Làm dở, chưa commit** | Mới có vài truy vấn repository. Còn M3, M4, M5, L3 |
 | **Thiết kế lại phạm vi ưu đãi** (voucher và khuyến mãi) | **Làm dở, chưa commit, chưa biên dịch** | Yêu cầu mới của chủ dự án, xem mục 3 |
 | **P7** gom quy tắc phạm vi | **Phần lõi đã nằm trong phần làm dở ở trên** | Còn test đặc tả bốn đường và đo số query. Đã gộp vào Prompt A |
-| **P8** tách service, enum, code chết, tắt OSIV | Chưa bắt đầu | Prompt B |
+| **P8** tách service, enum, code chết, tắt OSIV | **Xong 30/09/2026** | Xem `docs/ARCHITECTURE-IMPLEMENTATION.md`; Prompt B bên dưới chỉ còn giá trị lịch sử |
 
 Trước phần làm dở: backend 81 test đạt (1 bỏ qua) trên H2, Flyway V1–V9 chạy và `ddl-auto=validate` đạt trên MySQL 8. E2E trình duyệt 13/14 (xem mục 5).
 
@@ -25,6 +25,8 @@ Trước phần làm dở: backend 81 test đạt (1 bỏ qua) trên H2, Flyway 
 `git status` đang có thay đổi **chưa commit** của phần làm dở. Đừng `git reset`, `git checkout -- .` hay `git stash`. Chúng cần được hoàn tất, không phải bỏ đi. Code chính hiện **chưa biên dịch** (4 lỗi, liệt kê ở mục 4). Test chưa được biên dịch lại nên còn thêm lỗi tham chiếu `ScopeType.CATEGORY`, `Product.getDiscountedPrice()`.
 
 Giữ nguyên kiểu xuống dòng của từng file (nhiều file dùng CRLF). Không sửa migration V1–V9.
+
+> **Đã thay thế (2026-09-30).** Chủ dự án không muốn kết hợp danh mục với hãng. Mô hình `CATALOG` bên dưới đã được thay bằng `ALL / CATEGORY / BRAND / PRODUCT`, mỗi phạm vi là hợp của nhóm chọn cả nhóm và sản phẩm chọn lẻ (xem `docs/ARCHITECTURE-IMPLEMENTATION.md`, migration V11 và `OfferScopeRule`). Phần dưới giữ lại làm lịch sử.
 
 ## 3. Thiết kế phạm vi ưu đãi (đã chốt với chủ dự án, đang dở)
 
