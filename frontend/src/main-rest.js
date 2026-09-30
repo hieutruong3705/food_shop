@@ -7,4 +7,5 @@ import "./retail.css";
 import "./catalog.css";
 import "./experience.css";
 import "./admin-layout.css";
+import "./home.css";
 createApp(RestApp).use(createPinia()).use(router).mount("#app");

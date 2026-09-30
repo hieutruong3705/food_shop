@@ -3,13 +3,14 @@ import { ref, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { api, download } from "../services/api";
 import { resources } from "../lib/admin";
-import { money, date, statuses, paymentStatuses, useTask, imageUrl, imageError } from "../lib/shop";
+import { money, date, statuses, paymentStatuses, useTask, imageUrl, imageError, rateText } from "../lib/shop";
 import TaskState from "../components/TaskState.vue";
 import SearchMultiSelect from '../components/SearchMultiSelect.vue';
-import ScopePicker from '../components/ScopePicker.vue';
+import OfferForm from '../components/OfferForm.vue';
 const route = useRoute(),
   type = computed(() => route.params.resource || ""),
   config = computed(() => resources[type.value]),
+  isOffer = computed(() => ['promotions', 'vouchers'].includes(type.value)),
   rows = ref([]),
   page = ref(0),
   pages = ref(0),
@@ -112,6 +113,12 @@ function edit(row) {
           .slice(0, 16);
       }
     }
+    if (isOffer.value && !row) form.value[type.value === 'vouchers' ? 'discount' : 'discountRate'] = 10;
+    if (type.value === 'promotions' && !row) {
+      const now = new Date(), local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      form.value.startDate = local(now);
+      form.value.endDate = local(new Date(now.getTime() + 7 * 86400000));
+    }
     editing.value = row?.id || "new";
   });
 }
@@ -143,7 +150,7 @@ function save() {
       if (kind === "datetime-local")
         body[key] = body[key] ? new Date(body[key]).toISOString() : null;
     }
-    await api(
+    const saved = await api(
       `/admin/${type.value}${editing.value === "new" ? "" : `/${editing.value}`}`,
       {
         method: editing.value === "new" ? "POST" : "PUT",
@@ -151,10 +158,20 @@ function save() {
       },
     );
     await load();
-    message.value = "Đã lưu thay đổi.";
+    // Promotions may overlap others; saving still succeeds and the admin sees which ones.
+    message.value = ["Đã lưu thay đổi.", ...(saved?.warnings || [])].join(" ");
   });
 }
-function scopeSummary(row){if(row.scopeType==='ALL')return 'Tất cả sản phẩm';if(row.scopeType==='PRODUCT')return 'Sản phẩm ('+(row.productIds?.length||0)+')';return [row.categoryIds?.length?'Danh mục ('+row.categoryIds.length+')':'',row.brandIds?.length?'Thương hiệu ('+row.brandIds.length+')':''].filter(Boolean).join(' · ');}
+const rowPicture = (row) => row.logoUrl || row.imageUrl || (type.value === 'categories' ? row.image : '');
+function offerStatus(row){
+  if(!row.active)return{text:'Đã tắt',tone:'off'};
+  if(row.usageLimit&&row.usedCount>=row.usageLimit)return{text:'Hết lượt',tone:'off'};
+  const now=Date.now();
+  if(row.startDate&&now<new Date(row.startDate))return{text:'Sắp diễn ra',tone:'soon'};
+  if(row.endDate&&now>new Date(row.endDate))return{text:'Đã kết thúc',tone:'off'};
+  return{text:'Đang chạy',tone:'on'};
+}
+const offerWindow=(row)=>row.startDate||row.endDate?`${row.startDate?date(row.startDate):'Từ trước'} → ${row.endDate?date(row.endDate):'không giới hạn'}`:'Không giới hạn thời gian';
 let brandRequest=0;
 async function loadProductBrands(clear=true){
   const request=++brandRequest;choices.value.brands=[];if(clear)form.value.brandId='';
@@ -252,6 +269,14 @@ async function upload(event, variant) {
   });
   event.target.value = "";
 }
+// The form is drawn as cards; a resource without sections gets one card, and fields no card lists follow in a last one.
+const formSections = computed(() => {
+  const fields = config.value?.fields || [];
+  const sections = (config.value?.sections || [{ title: 'Thông tin', keys: fields.map(f => f[0]) }]).map(s => ({ ...s, fields: fields.filter(f => s.keys.includes(f[0])) }));
+  const used = new Set(sections.flatMap(s => s.keys));
+  const rest = fields.filter(f => !used.has(f[0]));
+  return rest.length ? [...sections, { title: 'Khác', wide: true, keys: [], fields: rest }] : sections;
+});
 const imageField = computed(() => ({ products: "images", categories: "image", brands: "logoUrl", banners: "imageUrl" })[type.value]);
 const previewImages = computed(() => {
   if (!imageField.value) return [];
@@ -465,10 +490,15 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
             Đóng
           </button>
         </div>
-        <label
-          v-for="[key, label, kind] in config.fields"
+        <OfferForm v-if="isOffer" v-model="form" :type="type" />
+        <template v-else>
+          <section v-for="section in formSections" :key="section.title" class="admin-card">
+            <header><h3>{{ section.title }}</h3><p v-if="section.hint" class="muted">{{ section.hint }}</p></header>
+            <div v-if="section.fields.length" class="admin-fields" :class="{ wide: section.wide }">
+              <label
+          v-for="[key, label, kind] in section.fields"
           :key="key"
-          :class="{ 'checkbox-label': kind === 'checkbox' }"
+          :class="{ 'checkbox-label': kind === 'checkbox', full: ['textarea', 'lines', 'specs'].includes(kind) }"
           >{{ label
           }}<input
             v-if="kind === 'checkbox'"
@@ -527,36 +557,34 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
                 'quantity',
                 'code',
               ].includes(key) || (type === 'promotions' && ['startDate', 'endDate'].includes(key))
-            " /></label
-        ><label
-          v-if="['products', 'categories', 'brands', 'banners'].includes(type)"
-          >Tải ảnh (PNG/JPEG/WebP, tối đa 5 MB)<input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            @change="upload($event)"
-            :disabled="busy" /></label
-        >
-        <SearchMultiSelect v-if="type==='categories'" v-model="form.brandIds" resource="brands" label="Thương hiệu áp dụng" />
-        <ScopePicker v-if="['promotions','vouchers'].includes(type)" v-model="form" :kind="type === 'vouchers' ? 'voucher' : 'promotion'" />
-        <p v-if="type==='products'&&form.categoryId&&!choices.brands.length" class="notice">Danh mục chưa gán thương hiệu. Hãy chọn hãng tại Quản trị → Danh mục trước khi lưu sản phẩm.</p>
-        <section v-if="imageField" class="image-preview-section" aria-label="Xem trước ảnh">
-          <p v-if="type === 'categories'" class="muted">Icon sẽ hiển thị ở menu danh mục và trang chủ. Nên dùng ảnh vuông, nền trong suốt.</p>
-          <p v-if="type === 'brands'" class="muted">Logo sẽ hiển thị trong menu và bộ lọc hãng. Nên dùng ảnh nền trong suốt.</p>
-          <p v-if="type === 'products'" class="muted">Thông số của các sản phẩm tạo thành bộ lọc theo danh mục. Nhập cùng tên thống nhất, ví dụ RAM: 16 GB hoặc Tần số quét: 144 Hz.</p>
-          <h3>Xem trước ảnh</h3>
-          <p class="muted">Ảnh được tải lên máy chủ. Bấm Lưu thay đổi để gắn ảnh với mục này.</p>
-          <p v-if="!previewImages.length" class="muted">Chưa có ảnh. Chọn tệp ở trên hoặc nhập đường dẫn ảnh.</p>
-          <div class="admin-image-grid">
-            <figure v-for="(url, index) in previewImages" :key="url + index" class="admin-image-preview">
-              <a :href="imageUrl(url)" target="_blank" rel="noopener noreferrer" aria-label="Mở ảnh kích thước đầy đủ">
-                <img :src="imageUrl(url)" :alt="`Ảnh xem trước ${index + 1}`" @error="imageError" />
-              </a>
-              <figcaption>{{ type === 'products' && index === 0 ? 'Ảnh đại diện' : `Ảnh ${index + 1}` }}</figcaption>
-              <button v-if="type === 'products' && index > 0" type="button" class="secondary" :disabled="busy" @click="makeCover(index)">Đặt làm ảnh đại diện</button>
-              <button type="button" class="text-button" :disabled="busy" @click="removeImage(index)">Bỏ ảnh khỏi mục này</button>
-            </figure>
-          </div>
-        </section>
+            " /></label>
+            </div>
+            <p v-if="section.notice === 'brands' && form.categoryId && !choices.brands.length" class="notice">Danh mục chưa gán thương hiệu. Hãy chọn hãng tại Quản trị → Danh mục trước khi lưu sản phẩm.</p>
+            <SearchMultiSelect v-if="section.brandPicker" v-model="form.brandIds" resource="brands" label="Thương hiệu áp dụng" />
+            <template v-if="section.media">
+              <label>Tải ảnh (PNG/JPEG/WebP, tối đa 5 MB)<input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              @change="upload($event)"
+              :disabled="busy" /></label>
+                      <section class="image-preview-section" aria-label="Xem trước ảnh">
+                    <h3>Xem trước ảnh</h3>
+                    <p class="muted">Ảnh được tải lên máy chủ. Bấm Lưu thay đổi để gắn ảnh với mục này.</p>
+                    <p v-if="!previewImages.length" class="muted">Chưa có ảnh. Chọn tệp ở trên hoặc nhập đường dẫn ảnh.</p>
+                    <div class="admin-image-grid">
+                      <figure v-for="(url, index) in previewImages" :key="url + index" class="admin-image-preview">
+                        <a :href="imageUrl(url)" target="_blank" rel="noopener noreferrer" aria-label="Mở ảnh kích thước đầy đủ">
+                          <img :src="imageUrl(url)" :alt="`Ảnh xem trước ${index + 1}`" @error="imageError" />
+                        </a>
+                        <figcaption>{{ type === 'products' && index === 0 ? 'Ảnh đại diện' : `Ảnh ${index + 1}` }}</figcaption>
+                        <button v-if="type === 'products' && index > 0" type="button" class="secondary" :disabled="busy" @click="makeCover(index)">Đặt làm ảnh đại diện</button>
+                        <button type="button" class="text-button" :disabled="busy" @click="removeImage(index)">Bỏ ảnh khỏi mục này</button>
+                      </figure>
+                    </div>
+                  </section>
+            </template>
+          </section>
+        </template>
         <section v-if="type === 'products'" class="variant-editor" aria-label="Tùy chọn sản phẩm">
           <h3>Tùy chọn / Phiên bản sản phẩm</h3>
           <p class="muted">Mỗi phiên bản có SKU, giá và tồn kho riêng. Bạn có thể thêm Màu sắc, RAM, Dung lượng hoặc thuộc tính khác. Giá chung là giá thấp nhất; tồn kho chung là tổng các phiên bản đang bán.</p>
@@ -657,6 +685,7 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
               <td>#{{ row.id }}</td>
               <td>
                 <img v-if="type === 'products' && row.images?.length" class="admin-product-thumbnail" :src="imageUrl(row.images[0])" :alt="row.name" @error="imageError" />
+                <img v-else-if="rowPicture(row)" class="admin-product-thumbnail" :src="imageUrl(rowPicture(row))" alt="" @error="imageError" />
                 {{
                   row.name ||
                   row.code ||
@@ -670,8 +699,9 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
               </td>
               <td>
                 <template v-if="type === 'products'"
-                  >{{ money(row.price)
-                  }}<small
+                  >{{ money(row.price) }}<span v-if="row.discountRate > 0" class="offer-status on" :title="row.promotionName">Đang giảm {{ rateText(row.discountRate) }}%</span
+                  ><small>{{ row.sku }} · {{ row.categoryName || 'Chưa có danh mục' }} · {{ row.brandName || 'Chưa có hãng' }}</small
+                  ><small
                     >Tồn: {{ row.quantity }} ·
                     {{ row.active ? (row.quantity > 0 ? "Đang bán" : "Đang bán · Hết hàng") : "Ngừng bán" }}</small
                   ></template
@@ -688,12 +718,18 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
                   >{{ row.rating }} ★<small>{{
                     row.productName
                   }}</small></template
-                ><template v-else-if="type === 'vouchers'"
-                  >{{ row.discount }}%<small>{{ row.active ? 'Đang hoạt động' : 'Đã tắt' }} · Đã dùng {{ row.usedCount }}{{ row.usageLimit ? '/' + row.usageLimit : '' }} · {{ scopeSummary(row) }}</small></template
-                ><template v-else-if="type === 'promotions'"
-                  >{{ row.discountRate }}%<small>{{ row.active ? 'Đang hoạt động' : 'Đã tắt' }} · {{ scopeSummary(row) }}</small></template
+                ><template v-else-if="isOffer"
+                  ><span class="offer-cell"
+                    ><b class="offer-rate">Giảm {{ row.discount ?? row.discountRate }}%</b
+                    ><span class="offer-status" :class="offerStatus(row).tone">{{ offerStatus(row).text }}</span></span
+                  ><small>{{ row.scopeDescription }}</small
+                  ><small>{{ offerWindow(row) }}<template v-if="type === 'vouchers'"> · Đã dùng {{ row.usedCount }}{{ row.usageLimit ? '/' + row.usageLimit : '' }}</template></small></template
                 ><template v-else-if="type === 'categories'"
-                  >{{ row.brandNames?.length ? row.brandNames.join(', ') : 'Chưa gán thương hiệu' }}</template
+                  >{{ row.productCount }} sản phẩm<small>{{ row.brandNames?.length ? row.brandNames.join(', ') : 'Chưa gán thương hiệu' }}</small></template
+                ><template v-else-if="type === 'brands'"
+                  >{{ row.productCount }} sản phẩm<small>{{ row.description || 'Chưa có mô tả' }}</small></template
+                ><template v-else-if="type === 'banners'"
+                  >{{ row.active ? 'Đang hiển thị' : 'Ẩn' }}<small>{{ row.link }}</small></template
                 ><template v-else>{{
                   row.active === false ? "Ẩn" : "—"
                 }}</template>

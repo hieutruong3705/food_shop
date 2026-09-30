@@ -10,6 +10,7 @@ import AdminLayout from './components/AdminLayout.vue';
 const auth = useAuth(), router = useRouter(), route = useRoute();
 const search = ref(""), error = ref("");
 const categories = ref([]), menuOpen = ref(false);
+const toTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 watch(() => route.fullPath, () => { menuOpen.value = false; });
 watch(menuOpen, async open => { if(open) { try { categories.value = await api('/categories'); } catch { /* Keep the last loaded menu; the catalog exposes errors. */ } } });
 onMounted(async () => { try { categories.value = await api('/categories'); } catch { /* The catalog page provides retry and errors. */ } });
@@ -42,11 +43,12 @@ onUnmounted(() => window.removeEventListener("session-expired", expired));
   <footer>
     <div class="footer-main">
       <div><RouterLink to="/" class="brand">TechShop<span class="logo-dot">.</span></RouterLink><p>Lựa chọn công nghệ phù hợp.<br />Đồng hành cùng trải nghiệm của bạn.</p><span class="footer-payment">COD · Thanh toán khi nhận hàng</span></div>
-      <div><strong>Khám phá</strong><RouterLink to="/products">Sản phẩm</RouterLink><RouterLink to="/orders">Đơn hàng của tôi</RouterLink></div>
+      <div><strong>Khám phá</strong><RouterLink to="/products">Sản phẩm</RouterLink><RouterLink to="/products?sort=newest">Hàng mới về</RouterLink><RouterLink to="/products?sort=popular">Được quan tâm</RouterLink><RouterLink to="/orders">Đơn hàng của tôi</RouterLink></div>
+      <div v-if="categories.length"><strong>Danh mục</strong><RouterLink v-for="c in categories.slice(0, 6)" :key="c.id" :to="{ path: '/products', query: { categoryId: c.id } }">{{ c.name }}</RouterLink></div>
       <div><strong>Hỗ trợ mua hàng</strong><RouterLink to="/policies">Chính sách &amp; bảo hành</RouterLink><RouterLink to="/account">Tài khoản</RouterLink><RouterLink to="/cart">Giỏ hàng của bạn</RouterLink></div>
       <div><strong>Mua sắm thuận tiện</strong><p>Xem rõ thông số, lựa chọn phiên bản và theo dõi đơn hàng ngay trên TechShop.</p><RouterLink to="/products" class="footer-explore">Khám phá ngay →</RouterLink></div>
     </div>
-    <div class="footer-bottom"><span>© {{ new Date().getFullYear() }} TechShop</span><span>Được tạo cho những trải nghiệm mới.</span></div>
+    <div class="footer-bottom"><span>© {{ new Date().getFullYear() }} TechShop</span><span>Được tạo cho những trải nghiệm mới.</span><a href="#top" class="footer-top" @click.prevent="toTop">Về đầu trang ↑</a></div>
   </footer>
   </template>
 </template>

@@ -26,7 +26,7 @@ async function send(text=message.value){
 }
 </script>
 <template>
-  <button v-if="!open" class="chat-launcher" aria-label="Mở TechShop AI" @click="show"><span>✦</span> TechShop AI</button>
+  <button v-if="!open" class="chat-launcher" aria-label="Mở TechShop AI" @click="show"><span aria-hidden="true">✦</span><em class="chat-label">TechShop AI</em></button>
   <section v-else class="tech-chat" role="dialog" aria-modal="false" aria-label="TechShop AI" @keydown.esc="open=false">
     <header><div><strong>✦ TechShop AI</strong><small><i></i> {{ error?'Tạm gián đoạn':'Online' }}{{ provider==='gemini'?' · Gemini':provider==='mock'?' · Phản hồi mẫu':'' }}</small></div><button aria-label="Thu nhỏ trò chuyện" @click="open=false">−</button><button aria-label="Đóng trò chuyện" @click="open=false">×</button></header>
     <div ref="log" class="chat-log" role="log" aria-live="polite" aria-relevant="additions text"><div v-for="(item,i) in messages" :key="i" class="chat-message" :class="item.role">{{ item.text }}</div><div v-if="busy" class="chat-typing" role="status" aria-label="Đang trả lời"><i></i><i></i><i></i></div></div>

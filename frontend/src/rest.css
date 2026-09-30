@@ -203,7 +203,7 @@ td p{max-width:350px;margin:8px 0 0}
 .stats-grid strong{margin-top:17px;font-size:25px;display:block}
 .stats-grid small{font-size:13px}
 .admin-content .section{margin-top:25px}
-footer{border-top:1px solid var(--border);background:#eef1e8;padding:45px 5vw 20px}
+footer{border-top:1px solid #0d5a4d;background:#073f37;color:#e4f3ed;padding:45px 5vw 20px}
 .footer-main{grid-template-columns:2fr 1fr 1fr;gap:40px;max-width:1280px;margin:auto;display:grid}
 .footer-main>div{flex-direction:column;gap:14px;font-size:13px;display:flex}
 .footer-main p{color:var(--muted);font-size:14px}

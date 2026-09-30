@@ -25,13 +25,14 @@ const router = useRouter(),
   }),
   { busy, error, message, run } = useTask();
 const shipping = computed(() => quote.value?.shippingFee || 0);
-async function refreshQuote() {
+async function refreshQuote(announce = false) {
   quote.value = await api(
     "/cart/quote?voucherCode=" +
       encodeURIComponent(form.voucherCode.trim()) +
       (form.cartItemIds ? "&cartItemIds=" + form.cartItemIds.join(",") : ""),
   );
-  message.value = "Đã cập nhật tổng thanh toán.";
+  // Only an explicit voucher check is announced; loading the page is not news.
+  if (announce) message.value = "Đã cập nhật tổng thanh toán" + (quote.value.discountAmount > 0 ? ", mã giảm giá đã được áp dụng." : ".");
 }
 onMounted(() =>
   run(async () => {
@@ -132,7 +133,7 @@ function submit() {
         type="button"
         class="secondary"
         :disabled="busy"
-        @click="run(refreshQuote)"
+        @click="run(() => refreshQuote(true))"
       >
         Áp dụng mã giảm giá
       </button>
@@ -148,7 +149,7 @@ function submit() {
       </div>
       <div class="summary-row">
         <span>Giảm giá</span
-        ><strong>−{{ money(quote?.discountAmount) }}</strong>
+        ><strong>{{ quote?.discountAmount > 0 ? '−' + money(quote.discountAmount) : money(0) }}</strong>
       </div>
       <div class="summary-row total">
         <span>Tổng thanh toán</span

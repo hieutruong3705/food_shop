@@ -17,6 +17,14 @@ export const resources = {
       ["technologyCatalog", "Hiển thị trong cửa hàng công nghệ", "checkbox"],
       ["active", "Đang kinh doanh", "checkbox"],
     ],
+    sections: [
+      { title: "Thông tin cơ bản", keys: ["name", "sku", "slug", "categoryId", "brandId"], notice: "brands" },
+      { title: "Giá và kho", hint: "Nếu sản phẩm có phiên bản, giá và tồn kho chung tính từ các phiên bản.", keys: ["price", "quantity", "warrantyMonths"] },
+      { title: "Mô tả", keys: ["shortDesc", "detailDesc"], wide: true },
+      { title: "Hình ảnh", hint: "Ảnh đầu tiên là ảnh đại diện. Nhập đường dẫn, mỗi dòng một ảnh, hoặc tải ảnh lên.", keys: ["images"], media: true, wide: true },
+      { title: "Thông số kỹ thuật", hint: "Thông số của các sản phẩm tạo thành bộ lọc theo danh mục. Nhập cùng tên thống nhất, ví dụ RAM: 16 GB hoặc Tần số quét: 144 Hz.", keys: ["specs"], wide: true },
+      { title: "Hiển thị", keys: ["technologyCatalog", "active"], wide: true },
+    ],
   },
   categories: {
     title: "Danh mục",
@@ -25,6 +33,11 @@ export const resources = {
       ["description", "Mô tả", "textarea"],
       ["image", "Icon danh mục (đường dẫn ảnh hoặc tải ảnh bên dưới)"],
     ],
+    sections: [
+      { title: "Thông tin", keys: ["name", "description"], wide: true },
+      { title: "Icon danh mục", hint: "Icon hiển thị ở menu danh mục và trang chủ. Nên dùng ảnh vuông, nền trong suốt.", keys: ["image"], media: true, wide: true },
+      { title: "Thương hiệu áp dụng", hint: "Sản phẩm của danh mục chỉ được chọn các hãng được gán ở đây.", keys: [], brandPicker: true },
+    ],
   },
   brands: {
     title: "Thương hiệu",
@@ -32,6 +45,10 @@ export const resources = {
       ["name", "Tên thương hiệu"],
       ["description", "Mô tả", "textarea"],
       ["logoUrl", "Đường dẫn logo"],
+    ],
+    sections: [
+      { title: "Thông tin", keys: ["name", "description"], wide: true },
+      { title: "Logo", hint: "Logo hiển thị trong menu và bộ lọc hãng. Nên dùng ảnh nền trong suốt.", keys: ["logoUrl"], media: true, wide: true },
     ],
   },
   banners: {
@@ -42,6 +59,11 @@ export const resources = {
       ["link", "Liên kết"],
       ["technologyCatalog", "Hiển thị trong cửa hàng công nghệ", "checkbox"],
       ["active", "Hiển thị", "checkbox"],
+    ],
+    sections: [
+      { title: "Thông tin", keys: ["name", "link"], wide: true },
+      { title: "Ảnh banner", hint: "Ảnh ngang, hiển thị ở trang chủ.", keys: ["imageUrl"], media: true, wide: true },
+      { title: "Hiển thị", keys: ["technologyCatalog", "active"], wide: true },
     ],
   },
   vouchers: {
@@ -76,6 +98,10 @@ export const resources = {
       ["technologyCatalog", "Hiển thị trong cửa hàng công nghệ", "checkbox"],
       ["active", "Hiển thị", "checkbox"],
     ],
+    sections: [
+      { title: "Nội dung", keys: ["name", "content"], wide: true },
+      { title: "Hiển thị", keys: ["technologyCatalog", "active"], wide: true },
+    ],
   },
   users: {
     title: "Người dùng",
@@ -84,6 +110,7 @@ export const resources = {
       ["enabled", "Đã kích hoạt", "checkbox"],
       ["locked", "Khóa tài khoản", "checkbox"],
     ],
+    sections: [{ title: "Quyền và trạng thái", keys: ["role", "enabled", "locked"], wide: true }],
     noCreate: true,
   },
   reviews: { title: "Đánh giá", fields: [], noCreate: true, noEdit: true },

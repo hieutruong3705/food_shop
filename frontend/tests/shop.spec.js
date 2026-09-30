@@ -79,7 +79,7 @@ test("desktop and mobile catalog, no overflow, product detail", async ({
   await page.goto("/products");
   await expect(page.locator(".product-card")).toHaveCount(12);
   await page.getByLabel("Tìm sản phẩm").fill("NovaBook");
-  await page.getByRole("button", { name: "Áp dụng", exact: true }).click();
+  await page.getByRole("button", { name: "Tìm", exact: true }).click();
   await expect(page.locator(".product-card")).toHaveCount(4);
   await page.locator(".product-card").first().click();
   await expect(

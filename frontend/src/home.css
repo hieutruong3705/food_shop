@@ -1,0 +1,68 @@
+/* Home page blocks (frontend/src/components/home) and the green footer. Loaded after retail.css. */
+.home-block{margin:0 0 34px}
+.home-block .product-grid{margin:0}
+
+/* Running promotion */
+.promo-row{background:linear-gradient(120deg,#fff3ee,#fff8e8);border:1px solid #f6d9cf;border-radius:15px;padding:26px}
+.promo-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:20px;flex-wrap:wrap}
+.promo-head h2{font-size:26px;letter-spacing:-.7px;margin:8px 0 6px}
+.promo-rate{display:inline-block;background:#df3c43;color:#fff;font-size:15px;letter-spacing:0;border-radius:6px;padding:4px 10px;vertical-align:middle;margin-left:8px}
+.promo-head p{margin:0 0 4px;font-size:14px;color:#5b4a42}
+.promo-head small{font-size:12px;color:#8a6d5f}
+.promo-row .campaign-tag{color:#a5281f}
+.promo-clock{display:grid;gap:6px;justify-items:end}
+.promo-clock>span{font-size:12px;font-weight:600;color:#8a3b2f}
+.promo-clock div{display:flex;gap:6px}
+.promo-clock b{display:grid;justify-items:center;min-width:52px;background:#2b1a16;color:#fff;border-radius:8px;padding:7px 4px;font-size:20px;font-variant-numeric:tabular-nums}
+.promo-clock i{font-style:normal;font-size:10px;font-weight:400;opacity:.75}
+.promo-more{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;font-weight:600;color:#a5281f}
+.promo-more .shop-icon{width:16px;height:16px}
+
+/* Brands */
+.brand-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+.brand-strip a{display:grid;gap:8px;justify-items:center;background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 10px}
+.brand-strip a:hover{border-color:#7fb6a7;box-shadow:0 6px 18px #193b2e14}
+.brand-logo{display:grid;place-items:center;height:44px;width:100%}
+.brand-logo img{max-height:44px;max-width:100%;object-fit:contain}
+.brand-logo .brand-wordmark{font-weight:700;font-size:16px}
+.brand-strip small{font-size:12px;color:#6b7c74}
+
+/* Category rows */
+.row-count{font-size:13px;font-weight:400;color:#6b7c74;letter-spacing:0;margin-left:8px}
+
+/* Reviews */
+.review-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.review-strip figure{margin:0;display:grid;gap:10px;align-content:start;background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px}
+.stars{color:#f5a623;font-size:16px;letter-spacing:2px}
+.stars i{font-style:normal;color:#d5dcd8}
+.review-strip blockquote{margin:0;font-size:14px;line-height:1.6;color:#33443d;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.review-strip figcaption{display:grid;gap:2px;font-size:13px}
+.review-strip figcaption a{color:#006b59;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.review-strip figcaption small{color:#7b8581}
+
+@media(max-width:1000px){.brand-strip{grid-template-columns:repeat(4,minmax(0,1fr))}.review-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.promo-clock{justify-items:start}}
+@media(max-width:650px){.home-block{margin-bottom:26px}.promo-row{padding:16px}.promo-head h2{font-size:21px}.brand-strip{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.review-strip{grid-template-columns:1fr}.promo-clock b{min-width:44px;font-size:17px}}
+
+/* Footer */
+footer .brand{color:#fff}
+footer .logo-dot{color:#d7ef95}
+.footer-main strong{color:#95c7b8}
+.footer-main p{color:#cfe6dc}
+.footer-main a:not(.brand){color:#e4f3ed}
+.footer-main a:not(.brand):hover{color:#fff;text-decoration:underline}
+.footer-payment{background:#0d5a4d;color:#e4f3ed}
+.footer-main .footer-explore{color:#d7ef95;font-weight:600}
+.footer-bottom{color:#a7c9bb;border-top:1px solid rgba(255,255,255,.14);align-items:center;gap:14px;flex-wrap:wrap}
+.footer-bottom .footer-top{color:#e4f3ed;font-weight:600}
+.footer-bottom .footer-top:hover{color:#fff}
+@media(min-width:1001px){.footer-main{grid-template-columns:1.5fr .8fr .8fr 1fr 1.3fr}}
+
+/* Small touch targets and the floating chat button on phones */
+.chat-label{font-style:normal}
+@media(max-width:760px){.chat-launcher{width:48px;height:48px;padding:0;border-radius:50%;display:grid;place-items:center;right:14px;bottom:14px}.chat-launcher>span{font-size:22px}.chat-label{display:none}}
+.carousel-dots button{width:24px;height:24px;background:none;display:grid;place-items:center;padding:0}
+.carousel-dots button::before{content:'';width:9px;height:9px;border-radius:50%;background:#ffffff66;transition:width .2s}
+.carousel-dots button.active{width:32px;background:none;border-radius:0}
+.carousel-dots button.active::before{width:24px;border-radius:5px;background:white}
+.footer-main a:not(.brand){display:inline-block;min-height:28px;padding:3px 0}
+.empty .button{margin-top:12px}

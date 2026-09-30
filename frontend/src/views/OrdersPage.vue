@@ -130,8 +130,9 @@ function cancel() {
         </tbody>
       </table>
     </div>
-    <p class="empty" v-else-if="!busy && !error">
-      Bạn chưa có đơn hàng nào.
-    </p></template
+    <div class="empty" v-else-if="!busy && !error">
+      <p>Bạn chưa có đơn hàng nào.</p>
+      <RouterLink to="/products" class="button">Khám phá sản phẩm</RouterLink>
+    </div></template
   >
 </template>

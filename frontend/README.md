@@ -2,9 +2,7 @@
 
 Vue 3, Vite, Pinia và Vue Router. Cần Node.js 22.12 trở lên.
 
-Bản hoạt động nối REST API dùng `vite.rest.config.js` → `src/main-rest.js` → `RestApp.vue`, router `src/router/index.js` và các trang `*Page.vue`/`TechHome.vue`. Script `dev`/`build` mặc định dùng entry này.
-
-Bộ TypeScript/Tailwind được thêm độc lập trong quá trình làm việc vẫn giữ nguyên (`main.ts`, `App.vue`, `router/index.ts`, các layout/view TypeScript). Một số trang trong bộ đó còn là scaffold/mock nên chưa dùng làm entry triển khai. Không trộn hai router/store trong cùng ứng dụng. `build:typescript`/`dev:typescript` giữ lệnh riêng cho phần này; không coi kết quả kiểm thử REST là kiểm chứng bộ scaffold. `rest.css` giữ giao diện đã kiểm chứng trước khi stylesheet gốc được thay thế.
+Ứng dụng nối REST API: `vite.config.js` → `src/main-rest.js` → `RestApp.vue`, router `src/router/index.js` và các trang `*Page.vue`/`TechHome.vue`. Bộ scaffold TypeScript/Tailwind và các trang mock cũ đã bị xóa vì không còn được dùng. `rest.css`, `retail.css`, `catalog.css`, `experience.css`, `admin-layout.css`, `home.css` được nạp theo thứ tự đó; file sau ghi đè file trước, nên đặt tên class riêng cho thành phần mới.
 
 Chạy backend theo [README dự án](../README.md), sau đó tại thư mục này:
 
@@ -19,8 +17,11 @@ Xác thực dùng cookie phiên và CSRF. Quyền ADMIN được kiểm tra lạ
 
 ```powershell
 npm.cmd run build
+npm.cmd run test:unit
 npm.cmd run test:e2e
 ```
+
+`test:unit` chạy vitest (thư mục `tests-unit/`, jsdom) cho logic không cần trình duyệt: `scopeMeta.js`, `FilterRange.vue`, bộ chọn phạm vi. `test:e2e` dùng Playwright, tự dựng backend H2 cô lập ở cổng 18080 từ `../target/techshop.jar`; nếu thư mục `test-results` bị khóa quyền, thêm `--output=../data/pw-output`.
 
 E2E dùng Chrome và hai server đang chạy, tài khoản demo từ `../data/dev-credentials.json`.
 Chỉ chạy trên dữ liệu dev/test: test tạo đơn COD, chuyển trạng thái và sửa dữ liệu mẫu.

@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
 
-test('category brands, scoped offers and warranty sliders persist through the admin UI',async({page})=>{
+test('category brands, scoped offers, sale tags and the price range persist through the admin UI',async({page})=>{
   test.setTimeout(120000);
   const credentials=JSON.parse(fs.readFileSync('../data/e2e-credentials.json','utf8').replace(/^\uFEFF/,''));
   await page.goto('/login');
@@ -48,64 +48,103 @@ test('category brands, scoped offers and warranty sliders persist through the ad
     await expect(page.getByLabel('Thương hiệu',{exact:true})).toHaveValue('');
     await expect(page.getByLabel('Thương hiệu',{exact:true}).locator('option:not([disabled])')).toHaveText([new RegExp(key+' C')]);
 
-    // Shared scope editor: CATALOG intersects groups, PRODUCT selects explicit items.
+    // Shared scope editor: whole store, categories, brands or hand-picked products; never mixed.
+    const mode=name=>page.getByRole('button',{name:new RegExp('^'+name)});
+    const applyAs=name=>page.getByRole('group',{name:'Cách áp dụng',exact:true}).getByRole('button',{name:new RegExp('^'+name)});
+    async function openGroup(label,search,pattern){
+      const groups=page.getByRole('region',{name:label,exact:true});
+      await groups.getByRole('searchbox').fill(search);
+      await groups.getByRole('button',{name:pattern}).click();
+    }
+    async function pickProduct(name){
+      const search=page.getByRole('searchbox',{name:/^Tìm sản phẩm/}).last();
+      await search.fill(name);
+      await page.getByRole('checkbox',{name,exact:true}).check();
+    }
     for(const type of ['promotions','vouchers']){
       const id=await create(type,{name:key,code:key,discountRate:10,discount:10,scopeType:'ALL',active:true,startDate:new Date(Date.now()-3600000).toISOString(),endDate:new Date(Date.now()+86400000).toISOString()});
-      for(const scope of ['CATALOG','PRODUCT','ALL']){
+      const cases=[
+        // [mode button, expected scope type, products the preview counts]
+        ['Theo danh mục','CATEGORY',2],['Theo thương hiệu','BRAND',1],['Theo thương hiệu','BRAND',2],['Sản phẩm cụ thể','PRODUCT',1],['Toàn bộ cửa hàng','ALL',2],
+      ];
+      for(const [label,scope,count] of cases){
         await edit(type,id);
-        const label={CATALOG:'Theo danh mục và thương hiệu',PRODUCT:'Sản phẩm cụ thể',ALL:'Toàn bộ cửa hàng'}[scope];
-        await page.getByRole('button',{name:new RegExp('^'+label)}).click();
-        await expect(page.locator('.search-multi')).toHaveCount(scope==='ALL'?0:scope==='CATALOG'?2:1);
-        if(scope==='CATALOG'){
-          const selector=page.getByRole('region',{name:'Danh mục áp dụng',exact:true});
-          await selector.getByRole('searchbox').fill(key);
-          await selector.getByRole('checkbox',{name:new RegExp('^'+key+' #')}).check();
-          await selector.getByRole('button',{name:'Đóng danh sách',exact:true}).click();
-          await choose('Thương hiệu áp dụng',key+' A');
-          await expect(page.locator('.scope-preview')).toContainText('Áp dụng cho 2 sản phẩm');
+        await mode(label).click();
+        let expected={categoryIds:[],brandIds:[],productIds:[]};
+        if(scope==='CATEGORY'){
+          // Whole category: every product in it.
+          await openGroup('Chọn danh mục',key,new RegExp('^'+key+' \\d'));
+          await applyAs('Toàn bộ danh mục').click();
+          expected.categoryIds=[category];
+        }else if(scope==='BRAND'&&count===1){
+          // A single product of a brand, not the whole brand.
+          await openGroup('Chọn thương hiệu',key+' A',new RegExp('^'+key+' A'));
+          await applyAs('Chọn từng sản phẩm').click();
+          await page.getByRole('checkbox',{name:key+'-0',exact:true}).check();
+          expected.productIds=[productIds[0]];
+        }else if(scope==='BRAND'){
+          // Switching the same brand to "whole" replaces its single products.
+          await openGroup('Chọn thương hiệu',key+' A',new RegExp('^'+key+' A'));
+          await applyAs('Toàn bộ thương hiệu').click();
+          expected.brandIds=[brandA];
         }else if(scope==='PRODUCT'){
-          await choose('Sản phẩm áp dụng',key+'-0');
-          await expect(page.locator('.scope-preview')).toContainText('Áp dụng cho 1 sản phẩm');
-          await expect(page.locator('.scope-samples img')).toHaveCount(1);
+          await pickProduct(key+'-0');
+          expected.productIds=[productIds[0]];
         }
+        await expect(page.locator('.scope-preview')).toContainText(scope==='ALL'?/Áp dụng cho \d+ sản phẩm/:'Áp dụng cho '+count+' sản phẩm');
+        if(scope==='PRODUCT')await expect(page.locator('.scope-samples img')).toHaveCount(1);
+        if(type==='promotions'&&scope!=='ALL')await expect(page.locator('.scope-samples .mini-tag').first()).toHaveText('Giảm 10%');
         await save();
         const saved=await detail(type,id);expect(saved.scopeType).toBe(scope);
-        expect(saved.categoryIds).toEqual(scope==='CATALOG'?[category]:[]);
-        expect(saved.brandIds).toEqual(scope==='CATALOG'?[brandA]:[]);
-        expect(saved.productIds).toEqual(scope==='PRODUCT'?[productIds[0]]:[]);
+        expect(saved.categoryIds).toEqual(expected.categoryIds);
+        expect(saved.brandIds).toEqual(expected.brandIds);
+        expect(saved.productIds).toEqual(expected.productIds);
         await edit(type,id);
-        await expect(page.getByRole('button',{name:new RegExp('^'+label)})).toHaveAttribute('aria-pressed','true');
+        await expect(mode(label)).toHaveAttribute('aria-pressed','true');
+        if(scope==='BRAND'&&count===1)await expect(page.locator('.tray-chip')).toContainText(key+' A · 1 sản phẩm');
         if(type==='promotions'){
           const result=await(await page.request.get('/api/v1/products?categoryId='+category+'&promotionId='+id)).json();
-          expect(result.totalElements).toBe(scope==='PRODUCT'?1:2);
-          expect(result.content.every(p=>p.discountedPrice===p.price*.9)).toBe(true);
+          expect(result.totalElements).toBe(scope==='ALL'?2:count);
+          expect(result.content.every(p=>p.discountedPrice===p.price*.9&&p.discountRate===10&&p.promotionName===key)).toBe(true);
         }
       }
       await page.screenshot({path:'test-results/'+type+'-scope.png',fullPage:true});
+      if(type==='promotions'){
+        // The storefront tags each product on sale with the promotion's rate.
+        await edit(type,id);await mode('Theo danh mục').click();
+        await openGroup('Chọn danh mục',key,new RegExp('^'+key+' \\d'));await applyAs('Toàn bộ danh mục').click();await save();
+        await page.goto('/products?categoryId='+category);
+        await expect(page.locator('.product-card .badge')).toHaveText(['Giảm 10%','Giảm 10%']);
+        await expect(page.locator('.product-card .sale-save').first()).toContainText('Tiết kiệm');
+      }
       expect((await page.request.delete('/api/v1/admin/'+type+'/'+id,{headers})).ok()).toBe(true);
     }
 
     await page.goto('/products?categoryId='+category);
     await expect(page.locator('.product-card')).toHaveCount(2);
     await expect(page.locator('.brand-filter-grid button')).toHaveCount(2); // Includes assigned B with no products.
-    await expect(page.getByRole('slider',{name:'Bảo hành từ',exact:true})).toHaveAttribute('min','12');
-    await expect(page.getByRole('slider',{name:'Bảo hành đến',exact:true})).toHaveAttribute('max','36');
+    // The warranty filter was removed; the price range starts at the cheapest product.
+    await expect(page.getByRole('slider',{name:/^Bảo hành/})).toHaveCount(0);
+    await expect(page.getByRole('slider',{name:'Giá từ',exact:true})).toHaveAttribute('min','1000000');
+    await expect(page.getByRole('slider',{name:'Giá đến',exact:true})).toHaveAttribute('max','2000000');
     await expect(page.locator('.catalog-filters summary').filter({hasText:/^(Phiên bản|Kết nối)$/})).toHaveCount(0);
-    const warrantySlider=page.getByRole('slider',{name:'Bảo hành từ',exact:true});
-    await warrantySlider.scrollIntoViewIfNeeded();
-    const track=await warrantySlider.boundingBox();
+    const priceSlider=page.getByRole('slider',{name:'Giá từ',exact:true});
+    await priceSlider.scrollIntoViewIfNeeded();
+    const track=await priceSlider.boundingBox();
     await page.mouse.move(track.x+9,track.y+track.height/2);await page.mouse.down();
     await page.mouse.move(track.x+track.width/2,track.y+track.height/2,{steps:12});await page.mouse.up();
-    // Releasing a thumb applies the warranty range; there is no separate button.
-    await expect(page).toHaveURL(/minWarranty=24/);await expect(page.locator('.product-card')).toHaveCount(1);
-    await page.reload();await expect(page.getByRole('slider',{name:'Bảo hành từ',exact:true})).toHaveValue('24');
+    // Dragging only changes the draft; the button applies it.
+    await expect(page).not.toHaveURL(/minPrice=/);await expect(page.locator('.product-card')).toHaveCount(2);
+    await page.getByRole('button',{name:'Áp dụng bộ lọc',exact:true}).click();
+    await expect(page).toHaveURL(/minPrice=1[45]\d{5}/);await expect(page.locator('.product-card')).toHaveCount(1);
+    await page.reload();await expect(page.getByRole('button',{name:/^Bỏ Giá /})).toHaveCount(1);
     await page.getByRole('button',{name:'Danh mục sản phẩm',exact:true}).click();
     const menu=page.locator('#header-categories');await menu.getByRole('button',{name:'Xem nhóm '+key,exact:true}).click();
     await expect(menu.locator('.mega-brands a')).toHaveText([key+' A',key+' B']);
     await menu.locator('.mega-brands').getByRole('link',{name:key+' A',exact:true}).click();
-    await expect(page).toHaveURL(/minWarranty=24/);await expect(page).toHaveURL(new RegExp('categoryId='+category));
+    await expect(page).toHaveURL(/minPrice=/);await expect(page).toHaveURL(new RegExp('categoryId='+category));
     await expect(page.locator('.product-card')).toHaveCount(1);
-    await page.screenshot({path:'test-results/warranty-filter.png',fullPage:true});
+    await page.screenshot({path:'test-results/price-filter.png',fullPage:true});
   }finally{
     for(const [type,id] of created.reverse()){
       if(type==='products'){const p=await detail(type,id);await page.request.put('/api/v1/admin/products/'+id,{headers,data:{...p,active:false,technologyCatalog:false}});}

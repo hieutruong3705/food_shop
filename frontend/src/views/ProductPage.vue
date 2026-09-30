@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch, computed } from "vue";
+import { ref, watch, computed, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "../services/api";
 import { useAuth } from "../stores/auth";
-import { money, imageUrl, imageError, useTask, date, discountPercent } from "../lib/shop";
+import { money, imageUrl, imageError, useTask, date, discountPercent, rateText } from "../lib/shop";
+import { rememberProduct } from "../lib/recent";
 import TaskState from "../components/TaskState.vue";
 import ProductCard from "../components/ProductCard.vue";
 const route = useRoute(),
@@ -48,6 +49,7 @@ function chooseOption(name, value) {
 const availableStock = computed(() => detail.value?.hasVariants ? (variant.value?.quantity || 0) : (detail.value?.product.quantity || 0));
 const displayedPrice = computed(() => variant.value?.discountedPrice ?? detail.value?.product.discountedPrice);
 const listedPrice = computed(() => variant.value?.price ?? detail.value?.product.price);
+const saleLabel = computed(() => detail.value?.product.discountRate > 0 ? rateText(detail.value.product.discountRate) : discountPercent(listedPrice.value, displayedPrice.value));
 watch(
   () => route.params.id,
   () =>
@@ -60,6 +62,7 @@ watch(
       review.value = { rating: 5, content: "" };
       detail.value = await api(`/products/${route.params.id}`);
       selected.value = detail.value.images[0];
+      rememberProduct(detail.value.product);
       await loadReviews();
       const p = await api(
         `/products?size=5&categoryId=${detail.value.categoryId || ""}`,
@@ -69,9 +72,27 @@ watch(
     }),
   { immediate: true },
 );
+// A visitor who presses "Thêm vào giỏ hàng" is taken to log in and the choice is added when they come back.
+const PENDING = "techshop.pendingCart";
+function readPending() {
+  try { return JSON.parse(sessionStorage.getItem(PENDING) || "null"); } catch { return null; }
+}
+function resumePending() {
+  const pending = readPending();
+  if (!pending || !auth.user || !detail.value || pending.productId !== detail.value.product.id) return;
+  try { sessionStorage.removeItem(PENDING); } catch { /* nothing to clean */ }
+  selectedOptions.value = pending.options || {};
+  quantity.value = pending.quantity || 1;
+  nextTick(add);
+}
+watch([() => auth.user, detail], resumePending);
 function add() {
-  if (!auth.user)
+  if (!auth.user) {
+    try {
+      sessionStorage.setItem(PENDING, JSON.stringify({ productId: detail.value.product.id, quantity: quantity.value, options: selectedOptions.value }));
+    } catch { /* the shopper can add again after logging in */ }
     return router.push({ path: "/login", query: { redirect: route.fullPath } });
+  }
   run(async () => {
     await api("/cart/items", {
       method: "POST",
@@ -119,6 +140,9 @@ async function loadReviews(){
     v-if="detail"
     ><div class="breadcrumb">
       <RouterLink to="/products">Sản phẩm</RouterLink> /
+      <template v-if="detail.categoryId && detail.product.category"
+        ><RouterLink :to="{ path: '/products', query: { categoryId: detail.categoryId } }">{{ detail.product.category }}</RouterLink> /
+      </template>
       {{ detail.product.name }}
     </div>
     <section class="detail-grid">
@@ -155,8 +179,12 @@ async function loadReviews(){
           <del v-if="listedPrice > displayedPrice">{{
             money(listedPrice)
           }}</del>
-          <span v-if="listedPrice > displayedPrice" class="discount-label">Giảm {{ discountPercent(listedPrice, displayedPrice) }}%</span>
+          <span v-if="listedPrice > displayedPrice" class="discount-label">Giảm {{ saleLabel }}%</span>
         </div>
+        <p v-if="listedPrice > displayedPrice" class="sale-banner">
+          <strong>{{ detail.product.promotionName || "Khuyến mãi" }}</strong>
+          · Tiết kiệm {{ money(listedPrice - displayedPrice) }}<template v-if="detail.product.promotionEndsAt"> · Kết thúc {{ date(detail.product.promotionEndsAt) }}</template>
+        </p>
         <p>
           {{
             detail.hasVariants && !variant ? "Chọn phiên bản để xem tồn kho" : availableStock
@@ -202,7 +230,7 @@ async function loadReviews(){
         <h2>Thông tin sản phẩm</h2>
         <p class="prewrap">{{ detail.detailDescription }}</p>
       </article>
-      <article class="panel">
+      <article v-if="detail.specifications.length" class="panel">
         <h2>Thông số kỹ thuật</h2>
         <dl class="specs">
           <template v-for="s in detail.specifications" :key="s.name"
@@ -214,7 +242,7 @@ async function loadReviews(){
     </div>
     <section class="panel section">
       <h2>Đánh giá khách hàng</h2>
-      <p class="review-summary" aria-label="Tổng hợp đánh giá"><strong>{{ Number(reviewSummary.average).toFixed(1) }}/5 ★</strong> · {{ reviewSummary.count }} đánh giá</p>
+      <p v-if="reviewSummary.count" class="review-summary" aria-label="Tổng hợp đánh giá"><strong>{{ Number(reviewSummary.average).toFixed(1) }}/5 ★</strong> · {{ reviewSummary.count }} đánh giá</p>
       <p v-if="!reviews.length" class="muted">
         Chưa có đánh giá cho sản phẩm này.
       </p>

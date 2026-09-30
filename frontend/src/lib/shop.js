@@ -5,6 +5,14 @@ export const discountPercent = (price, discountedPrice) => {
     Math.min(100, Math.max(0, ((price - discountedPrice) / price) * 100)),
   );
 };
+/** The percent off a sale tag shows: the running promotion's own rate, else worked out from the two prices. */
+export const saleRate = (product) => {
+  if (!product) return 0;
+  if (product.discountRate > 0) return product.discountRate;
+  return Number(String(discountPercent(product.price, product.discountedPrice)).replace(",", ".")) || 0;
+};
+export const rateText = (rate) =>
+  new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(rate);
 export const money = (value) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
     value || 0,

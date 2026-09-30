@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from "vue";
 import { api } from "../services/api";
-import { money, imageUrl, imageError, useTask } from "../lib/shop";
+import { money, imageUrl, imageError, useTask, rateText } from "../lib/shop";
 import TaskState from "../components/TaskState.vue";
 const cart = ref(null),
   selected = ref([]),
@@ -62,7 +62,10 @@ function remove(item) {
             ><strong>{{ item.name }}{{ item.variantLabel ? " · " + item.variantLabel : "" }}</strong></RouterLink
           >
           <strong v-else>{{ item.name }}{{ item.variantLabel ? " · " + item.variantLabel : "" }}</strong>
-          <p>{{ money(item.price) }}</p>
+          <p>{{ money(item.price) }}<template v-if="item.discountRate > 0"> <del class="cart-list-price">{{ money(item.listPrice) }}</del> <span class="badge-inline">Giảm {{ rateText(item.discountRate) }}%</span></template></p>
+          <small v-if="item.active && item.addedPrice > 0 && item.addedPrice !== item.price" class="price-changed"
+            >Giá đã {{ item.price > item.addedPrice ? "tăng" : "giảm" }} so với lúc bạn thêm ({{ money(item.addedPrice) }}).</small
+          >
           <small
             v-if="!item.active || item.stock < item.quantity"
             class="error-text"
