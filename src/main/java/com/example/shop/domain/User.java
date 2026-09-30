@@ -24,7 +24,7 @@ public class User implements Serializable {
 
     private String phone;
 
-    private String address;
+    @Column(length=500) private String address;
 
     private long status = 1;
 
@@ -35,6 +35,13 @@ public class User implements Serializable {
     // Dùng cho chức năng Quên mật khẩu
     @Column(name = "reset_password_token")
     private String resetPasswordToken;
+
+    private java.time.Instant resetPasswordExpiresAt;
+    private java.time.Instant verificationExpiresAt;
+    public java.time.Instant getResetPasswordExpiresAt(){return resetPasswordExpiresAt;}
+    public void setResetPasswordExpiresAt(java.time.Instant value){resetPasswordExpiresAt=value;}
+    public java.time.Instant getVerificationExpiresAt(){return verificationExpiresAt;}
+    public void setVerificationExpiresAt(java.time.Instant value){verificationExpiresAt=value;}
 
     // Dùng cho chức năng Xác thực Email
     @Column(name = "verification_code", length = 64)

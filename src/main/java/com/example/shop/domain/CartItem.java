@@ -19,6 +19,9 @@ public class CartItem {
     @ManyToOne
     @JoinColumn(name = "product_id")
     private Product product;
+    @ManyToOne @JoinColumn(name="variant_id") private ProductVariant variant;
+    public ProductVariant getVariant(){return variant;}
+    public void setVariant(ProductVariant value){variant=value;}
 
     // ĐÃ XÓA: ProductColor productColor
 

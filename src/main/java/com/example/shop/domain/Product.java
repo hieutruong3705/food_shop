@@ -10,6 +10,11 @@ import org.hibernate.annotations.Formula;
 @Entity
 @Table(name = "products")
 public class Product implements Serializable {
+    @jakarta.persistence.Column(nullable=false)
+    private boolean technologyCatalog=true;
+    public boolean isTechnologyCatalog(){return technologyCatalog;}
+    public void setTechnologyCatalog(boolean value){technologyCatalog=value;}
+
 
     private static final long serialVersionUID = 1L;
 
@@ -20,13 +25,29 @@ public class Product implements Serializable {
     @Column(nullable = false)
     private String name;
 
+    @Column(unique = true) private String sku;
+    @Column(unique = true) private String slug;
+    private Integer warrantyMonths;
+    public String getSku() { return sku; }
+    public void setSku(String value) { sku = value; }
+    public String getSlug() { return slug; }
+    public void setSlug(String value) { slug = value; }
+    public Integer getWarrantyMonths() { return warrantyMonths; }
+    public void setWarrantyMonths(Integer value) { warrantyMonths = value; }
+
     private double price;
+    @OneToMany(mappedBy="product",cascade=CascadeType.ALL)
+    @OrderBy("id ASC")
+    private List<ProductVariant> variants=new ArrayList<>();
+    public List<ProductVariant> getVariants(){return variants;}
+    public boolean hasVariants(){return !variants.isEmpty();}
 
     // Thêm trường active cho Soft Delete (Mặc định là true - Đang kinh doanh)
     @Column(columnDefinition = "boolean default true")
     private boolean active = true;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OrderBy("sortOrder ASC, id ASC")
     private List<ProductImage> images = new ArrayList<>();
 
     @Column(columnDefinition = "TEXT")
@@ -72,40 +93,13 @@ public class Product implements Serializable {
     // Tính giá thực tế sau khi giảm (Dùng để bán và hiển thị)
     @Transient
     public double getDiscountedPrice() {
-        double currentPrice = this.price;
-        double maxDiscount = 0;
-        Date now = new Date();
-
-        // 1. Kiểm tra Khuyến mãi áp dụng TRỰC TIẾP lên Sản phẩm
-        if (this.promotions != null && !this.promotions.isEmpty()) {
-            for (Promotion p : this.promotions) {
-                if (p.isActive() && p.getStartDate().before(now) && p.getEndDate().after(now)) {
-                    if (p.getDiscountRate() > maxDiscount) {
-                        maxDiscount = p.getDiscountRate();
-                    }
-                }
-            }
-        }
-
-        // 2. Kiểm tra Khuyến mãi áp dụng cho THƯƠNG HIỆU (Hãng)
-        if (this.brand != null && this.brand.getPromotions() != null && !this.brand.getPromotions().isEmpty()) {
-            for (Promotion p : this.brand.getPromotions()) {
-                if (p.isActive() && p.getStartDate().before(now) && p.getEndDate().after(now)) {
-                    if (p.getDiscountRate() > maxDiscount) {
-                        maxDiscount = p.getDiscountRate();
-                    }
-                }
-            }
-        }
-
-        // 3. Tính giá trị cuối cùng nếu có giảm giá (lấy mức giảm sâu nhất)
-        if (maxDiscount > 0) {
-            return currentPrice - (currentPrice * maxDiscount / 100.0);
-        }
-
-        return currentPrice;
+        return discountedPrice(this.price);
     }
-
+    @Formula("(select coalesce(max(pr.discount_rate),0) from promotions pr where pr.active=true and pr.start_date<current_timestamp and pr.end_date>current_timestamp and (pr.scope_type='ALL' or (pr.scope_type='PRODUCT' and exists(select 1 from product_promotion pp where pp.promotion_id=pr.id and pp.product_id=id)) or (pr.scope_type='BRAND' and exists(select 1 from brand_promotion bp where bp.promotion_id=pr.id and bp.brand_id=brand_id)) or (pr.scope_type='CATEGORY' and exists(select 1 from promotion_category pc where pc.promotion_id=pr.id and pc.category_id=category_id))))")
+    private double activePromotionDiscount;
+    public double discountedPrice(double currentPrice) {
+        return activePromotionDiscount>0?Math.round(currentPrice*(1-Math.min(100,activePromotionDiscount)/100)):currentPrice;
+    }
     // Kiểm tra xem sản phẩm có đang được giảm giá không (để hiện nhãn SALE)
     @Transient
     public boolean isOnSale() {

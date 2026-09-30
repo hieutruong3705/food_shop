@@ -10,7 +10,13 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface OrderRepository extends JpaRepository<Order, Long> {
+public interface OrderRepository extends JpaRepository<Order, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Order> {
+    List<Order> findByCreatedAtBetween(java.util.Date start,java.util.Date end);
+    List<Order> findByPaymentMethodAndStatusAndPaymentStatusAndCreatedAtBefore(String method,String status,String paymentStatus,java.util.Date before);
+    java.util.Optional<Order> findByCheckoutKey(String checkoutKey);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id = :id")
+    java.util.Optional<Order> lockById(@Param("id") long id);
 
     // 1. Lấy danh sách đơn hàng của User (giữ nguyên)
     List<Order> findByUserOrderByIdDesc(User user);

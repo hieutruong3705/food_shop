@@ -9,7 +9,16 @@ import java.util.List;
 import org.springframework.data.repository.query.Param;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<User, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<User> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.email = :email")
+    User lockByEmail(@Param("email") String email);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.resetPasswordToken = :token")
+    User lockByResetToken(@Param("token") String token);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.verificationCode = :code")
+    User lockByVerificationCode(@Param("code") String code);
 
     List<User> findByRole(Role role);
 

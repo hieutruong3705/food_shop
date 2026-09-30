@@ -9,13 +9,22 @@ import java.util.List;
 
 @Entity
 @Table(name = "promotions")
-public class Promotion implements Serializable {
+public class Promotion implements Serializable,ScopedOffer {
+    @Enumerated(EnumType.STRING) @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
+    @Column(nullable=false,length=20) private ScopeType scopeType=ScopeType.PRODUCT;
+    public ScopeType getScopeType(){return scopeType;}
+    public void setScopeType(ScopeType type){scopeType=type;}
+    @ManyToMany
+    @JoinTable(name="promotion_category",joinColumns=@JoinColumn(name="promotion_id"),inverseJoinColumns=@JoinColumn(name="category_id"))
+    private List<Category> categories=new java.util.ArrayList<>();
+    public List<Category> getCategories(){return categories;}
+    public void setCategories(List<Category> value){categories=value;}
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
 
     private String name;
-    private String description;
+    @Column(columnDefinition="TEXT") private String description;
 
     private double discountRate;
 
@@ -30,7 +39,7 @@ public class Promotion implements Serializable {
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "product_promotion", joinColumns = @JoinColumn(name = "promotion_id"), inverseJoinColumns = @JoinColumn(name = "product_id"))
-    private List<Product> products;
+    private List<Product> products=new java.util.ArrayList<>();
 
     public Promotion() {
     }
@@ -112,7 +121,7 @@ public class Promotion implements Serializable {
     // Thêm vào class Promotion
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "brand_promotion", joinColumns = @JoinColumn(name = "promotion_id"), inverseJoinColumns = @JoinColumn(name = "brand_id"))
-    private List<Brand> brands; // Đừng quên tạo getter/setter cho thuộc tính này
+    private List<Brand> brands=new java.util.ArrayList<>();
 
     public List<Brand> getBrands() {
         return brands;

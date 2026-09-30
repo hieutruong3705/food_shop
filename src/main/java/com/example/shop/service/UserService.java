@@ -20,6 +20,8 @@ import java.util.UUID;
 
 @Service
 public class UserService {
+    @org.springframework.beans.factory.annotation.Value("${shop.mail-from:no-reply@techshop.example}")
+    private String mailFrom;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
@@ -50,6 +52,7 @@ public class UserService {
 
         // --- THÊM MỚI ---
         user.setVerificationCode(UUID.randomUUID().toString()); // Tạo mã xác thực
+        user.setVerificationExpiresAt(java.time.Instant.now().plusSeconds(86400));
         user.setEnabled(false); // Mặc định chưa kích hoạt
         // ----------------
 
@@ -62,14 +65,14 @@ public class UserService {
     public void sendVerificationEmail(User user, String siteURL)
             throws MessagingException, UnsupportedEncodingException {
         String toAddress = user.getEmail();
-        String fromAddress = "jaketruong7@gmail.com";
-        String senderName = "16Home Support";
+        String fromAddress = mailFrom;
+        String senderName = "TechShop Support";
         String subject = "Vui lòng xác thực đăng ký tài khoản";
         String content = "Chào [[name]],<br>"
                 + "Vui lòng nhấn vào liên kết dưới đây để kích hoạt tài khoản của bạn:<br>"
                 + "<h3><a href=\"[[URL]]\" target=\"_self\">XÁC THỰC NGAY</a></h3>"
                 + "Cảm ơn,<br>"
-                + "16Home Team.";
+                + "TechShop Team.";
 
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message);
@@ -78,7 +81,7 @@ public class UserService {
         helper.setTo(toAddress);
         helper.setSubject(subject);
 
-        content = content.replace("[[name]]", user.getFullName());
+        content = content.replace("[[name]]", org.springframework.web.util.HtmlUtils.htmlEscape(user.getFullName()));
         String verifyURL = siteURL + "/verify?code=" + user.getVerificationCode();
         content = content.replace("[[URL]]", verifyURL);
 
@@ -87,10 +90,11 @@ public class UserService {
     }
 
     // Xử lý khi người dùng bấm link xác thực
+    @org.springframework.transaction.annotation.Transactional
     public boolean verify(String verificationCode) {
-        User user = userRepository.findByVerificationCode(verificationCode);
+        User user = userRepository.lockByVerificationCode(verificationCode);
 
-        if (user == null || user.isEnabled()) {
+        if (user == null || user.isEnabled() || user.getVerificationExpiresAt()==null || user.getVerificationExpiresAt().isBefore(java.time.Instant.now())) {
             return false; // Code sai hoặc đã kích hoạt rồi
         } else {
             user.setVerificationCode(null); // Xóa code đi
@@ -107,6 +111,7 @@ public class UserService {
         User user = userRepository.findByEmail(email);
         if (user != null) {
             user.setResetPasswordToken(token);
+            user.setResetPasswordExpiresAt(java.time.Instant.now().plusSeconds(3600));
             userRepository.save(user);
         } else {
             throw new Exception("Không tìm thấy email: " + email);
@@ -114,8 +119,11 @@ public class UserService {
     }
 
     // 2. Tìm user bằng token reset password
+    @org.springframework.transaction.annotation.Transactional
     public User getByResetPasswordToken(String token) {
-        return userRepository.findByResetPasswordToken(token);
+        if(token==null || token.isBlank())return null;
+        User user=userRepository.lockByResetToken(token);
+        return user!=null && user.getResetPasswordExpiresAt()!=null && user.getResetPasswordExpiresAt().isAfter(java.time.Instant.now())?user:null;
     }
 
     // 3. Cập nhật mật khẩu mới và xóa token
@@ -126,6 +134,7 @@ public class UserService {
         user.setPassword(newPassword);
 
         user.setResetPasswordToken(null); // Xóa token reset nếu có
+        user.setResetPasswordExpiresAt(null);
         userRepository.save(user);
     }
 
@@ -134,7 +143,7 @@ public class UserService {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message);
 
-        helper.setFrom("jaketruong7@gmail.com", "Shop Support");
+        helper.setFrom(mailFrom, "TechShop Support");
         helper.setTo(recipientEmail);
 
         String subject = "Yêu cầu đặt lại mật khẩu";

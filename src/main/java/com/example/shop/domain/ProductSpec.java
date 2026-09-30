@@ -14,7 +14,7 @@ public class ProductSpec implements Serializable {
     private long id;
 
     private String specName;
-    private String specValue;
+    @Column(length=500) private String specValue;
 
     @ManyToOne
     @JoinColumn(name = "product_id")

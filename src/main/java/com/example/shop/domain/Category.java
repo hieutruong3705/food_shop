@@ -19,6 +19,11 @@ public class Category {
     private String description;
 
     private String image;
+    @ManyToMany
+    @JoinTable(name="category_brands",joinColumns=@JoinColumn(name="category_id"),inverseJoinColumns=@JoinColumn(name="brand_id"))
+    private List<Brand> brands=new java.util.ArrayList<>();
+    public List<Brand> getBrands(){return brands;}
+    public void setBrands(List<Brand> value){brands=value;}
 
     @OneToMany(mappedBy = "category")
     private List<Product> products;

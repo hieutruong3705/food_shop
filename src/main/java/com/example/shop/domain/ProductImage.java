@@ -11,6 +11,9 @@ public class ProductImage implements Serializable {
     private long id;
 
     private String imageUrl;
+    @org.hibernate.annotations.ColumnDefault("0") @Column(nullable=false) private int sortOrder;
+    public int getSortOrder(){return sortOrder;}
+    public void setSortOrder(int value){sortOrder=value;}
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id")

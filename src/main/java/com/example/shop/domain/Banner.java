@@ -5,6 +5,11 @@ import jakarta.persistence.*;
 @Entity
 @Table(name = "banners")
 public class Banner {
+    @jakarta.persistence.Column(nullable=false)
+    private boolean technologyCatalog=true;
+    public boolean isTechnologyCatalog(){return technologyCatalog;}
+    public void setTechnologyCatalog(boolean value){technologyCatalog=value;}
+
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

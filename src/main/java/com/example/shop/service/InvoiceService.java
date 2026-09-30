@@ -36,7 +36,7 @@ public class InvoiceService {
             String fontPath = "src/main/resources/fonts/arial.ttf";
 
             // Tạo BaseFont với chế độ IDENTITY_H (để gõ tiếng Việt Unicode)
-            BaseFont bf = BaseFont.createFont(fontPath, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
+            BaseFont bf = BaseFont.createFont("arial.ttf", BaseFont.IDENTITY_H, BaseFont.EMBEDDED, true, new org.springframework.core.io.ClassPathResource("fonts/arial.ttf").getInputStream().readAllBytes(), null);
 
             // Tạo các kiểu chữ từ BaseFont
             Font fontTitle = new Font(bf, 18, Font.BOLD); // Chữ to đậm
@@ -87,7 +87,7 @@ public class InvoiceService {
                 for (OrderDetail detail : order.getOrderDetails()) {
                     addCellToTable(table, String.valueOf(i++), fontInfo);
                     // Tên sản phẩm tiếng Việt
-                    addCellToTable(table, detail.getProduct().getName(), fontInfo);
+                    addCellToTable(table, (detail.getProductName() + (detail.getVariantLabel()==null ? "" : " · " + detail.getVariantLabel())), fontInfo);
                     addCellToTable(table, String.valueOf(detail.getQuantity()), fontInfo);
 
                     double thanhTien = detail.getPrice() * detail.getQuantity();
@@ -107,7 +107,7 @@ public class InvoiceService {
             document.close();
 
         } catch (Exception e) {
-            e.printStackTrace(); // In lỗi ra CMD nếu không tìm thấy file font
+            throw new IllegalStateException("Không thể xuất hóa đơn", e);
         }
     }
 

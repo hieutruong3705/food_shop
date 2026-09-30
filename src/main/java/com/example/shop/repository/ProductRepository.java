@@ -13,7 +13,11 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface ProductRepository extends JpaRepository<Product, Long> {
+public interface ProductRepository extends JpaRepository<Product, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Product> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Product p where p.id = :id")
+    java.util.Optional<Product> lockById(@org.springframework.data.repository.query.Param("id") long id);
+    boolean existsBySku(String sku);
 
     List<Product> findByNameContainingIgnoreCaseAndCategoryId(String name, Long categoryId);
 

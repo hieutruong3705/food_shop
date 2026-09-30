@@ -1,0 +1,13 @@
+.git
+legacy
+.codex
+.agents
+data
+target
+frontend/node_modules
+frontend/dist
+frontend/test-results
+frontend/playwright-report
+.env
+*.log
+cloudflared.exe.exe

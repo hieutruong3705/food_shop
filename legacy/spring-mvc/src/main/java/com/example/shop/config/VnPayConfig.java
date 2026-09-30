@@ -14,8 +14,8 @@ public class VnPayConfig {
     // Controller)
     public static String vnp_ReturnUrl = "http://localhost:8080/vnpay-return";
 
-    public static String vnp_TmnCode = "UAP7IJD6";
-    public static String vnp_HashSecret = "Y7IWQFJFWWSMKGF9ZH3VNDG8XKUZC2UM";
+    public static String vnp_TmnCode = System.getenv().getOrDefault("VNPAY_TMN_CODE", "");
+    public static String vnp_HashSecret = System.getenv().getOrDefault("VNPAY_HASH_SECRET", "");
     public static String vnp_Version = "2.1.0";
     public static String vnp_Command = "pay";
 

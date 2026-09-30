@@ -13,10 +13,33 @@ public class Order {
     private long id;
 
     private double totalPrice;
+    @org.hibernate.annotations.ColumnDefault("false")
+    @Column(nullable=false) private boolean adminArchived;
+    public boolean isAdminArchived(){return adminArchived;}
+    public void setAdminArchived(boolean value){adminArchived=value;}
+
+    @Column(unique = true, length = 100) private String checkoutKey;
+    private String checkoutFingerprint;
+    private Double shippingFee;
+    private Double discountAmount;
+    private String voucherCode;
+    public String getCheckoutKey() { return checkoutKey; }
+    public void setCheckoutKey(String value) { checkoutKey = value; }
+    public String getCheckoutFingerprint() { return checkoutFingerprint; }
+    public void setCheckoutFingerprint(String value) { checkoutFingerprint = value; }
+    public Double getShippingFee() { return shippingFee; }
+    public void setShippingFee(Double value) { shippingFee = value; }
+    public Double getDiscountAmount() { return discountAmount; }
+    public void setDiscountAmount(Double value) { discountAmount = value; }
+    public String getVoucherCode() { return voucherCode; }
+    public void setVoucherCode(String value) { voucherCode = value; }
 
     private String receiverName;
-    private String receiverAddress;
+    @Column(length=500) private String receiverAddress;
     private String receiverPhone;
+    @Column(length=1000) private String note;
+    public String getNote() { return note; }
+    public void setNote(String value) { note = value; }
 
     private String status;
 

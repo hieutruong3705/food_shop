@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface BrandRepository extends JpaRepository<Brand, Long> {
+public interface BrandRepository extends JpaRepository<Brand, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Brand> {
 
     // Tìm kiếm thương hiệu theo tên (Bỏ qua viết hoa/viết thường)
     List<Brand> findByNameContainingIgnoreCase(String keyword);
