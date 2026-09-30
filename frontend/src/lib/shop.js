@@ -18,6 +18,13 @@ export const statuses = {
   COMPLETED: "Hoàn thành",
   CANCELLED: "Đã hủy",
 };
+export const paymentStatuses = {
+  UNPAID: "Chưa thanh toán",
+  PAID: "Đã thanh toán",
+  FAILED: "Thanh toán thất bại",
+  EXPIRED: "Hết hạn thanh toán",
+  REFUND_REQUIRED: "Cần hoàn tiền",
+};
 export function imageUrl(value) {
   return !value
     ? "/tech/laptop.svg"

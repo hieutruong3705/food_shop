@@ -55,9 +55,11 @@ Danh sách sản phẩm công khai và quản trị luôn ưu tiên `quantity > 
 | PATCH | /orders/{id}/status | `{ "status": "CANCELLED" }`; chỉ khi PENDING, chưa trả tiền |
 | GET | /payments/options | COD và trạng thái cấu hình VNPay sandbox |
 | POST | /orders/{id}/payment | URL VNPay sandbox cho đơn online chưa thanh toán |
-| GET | /payments/vnpay/ipn | Callback có chữ ký; không cần session |
+| GET | /payments/vnpay/ipn | Callback có chữ ký; không cần session. IPN thành công đến sau khi đơn hủy/hết hạn: `RspCode 00`, đơn giữ `CANCELLED`, `paymentStatus=REFUND_REQUIRED`, mã giao dịch lưu ở `paymentReference`; IPN lặp lại trả `02` |
 
 `POST /orders` yêu cầu header `Idempotency-Key` (16–80 ký tự chữ/số/gạch ngang). Gửi lại cùng key và nội dung trả cùng đơn; cùng key nhưng nội dung khác bị từ chối. Không nhận giá/tổng tiền/quyền từ client.
+
+Đơn trả thêm `refundRequired` và `paymentReference`. Admin lọc đơn cần hoàn tiền bằng `GET /admin/orders?refundRequired=true`; `GET /admin/dashboard` có `refundRequired` (tổng đơn cần hoàn tiền, không phụ thuộc khoảng ngày). Đơn `REFUND_REQUIRED` không có `allowedStatuses` và không lưu trữ được.
 
 Bộ lọc: `brandIds=1&brandIds=2`, `spec.RAM=16%20GB&spec.RAM=32%20GB&spec.CPU=Core%20i7`. Cùng nhóm dùng OR, giữa các nhóm dùng AND; áp dụng ở database trước phân trang. `inStock=true` chỉ lấy tồn kho lớn hơn 0. Giá lọc là giá niêm yết. Facet và số lượng theo toàn bộ danh mục, chỉ tính sản phẩm công nghệ đang kinh doanh, không phụ thuộc các bộ lọc còn lại. Không chọn danh mục thì chỉ trả hãng/giá/tồn kho, tránh trộn thông số khác loại. `/brands` và `facets.brands` có `logoUrl`; `/categories` có `image` dùng làm icon.
 

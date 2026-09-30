@@ -2,7 +2,7 @@
 import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { api } from "../services/api";
-import { money, date, statuses, useTask } from "../lib/shop";
+import { money, date, statuses, paymentStatuses, useTask } from "../lib/shop";
 import TaskState from "../components/TaskState.vue";
 const route = useRoute(),
   orders = ref([]),
@@ -62,9 +62,10 @@ function cancel() {
         <p v-if="order.note">Ghi chú: {{ order.note }}</p>
         <p>
           {{ order.paymentMethod }} ·
-          {{
-            order.paymentStatus === "PAID" ? "Đã thanh toán" : "Chưa thanh toán"
-          }}
+          {{ paymentStatuses[order.paymentStatus] || order.paymentStatus }}
+        </p>
+        <p v-if="order.refundRequired" class="muted">
+          Thanh toán đến sau khi đơn đã hủy. Cửa hàng sẽ hoàn tiền cho bạn, mã giao dịch {{ order.paymentReference || "—" }}.
         </p>
         <button
           v-if="

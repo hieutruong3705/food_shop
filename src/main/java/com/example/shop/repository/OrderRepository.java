@@ -11,6 +11,7 @@ import java.util.List;
 
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Order> {
+    long countByPaymentStatus(String paymentStatus);
     List<Order> findByCreatedAtBetween(java.util.Date start,java.util.Date end);
     List<Order> findByPaymentMethodAndStatusAndPaymentStatusAndCreatedAtBefore(String method,String status,String paymentStatus,java.util.Date before);
     java.util.Optional<Order> findByCheckoutKey(String checkoutKey);

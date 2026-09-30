@@ -3,7 +3,7 @@ import { ref, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { api, download } from "../services/api";
 import { resources } from "../lib/admin";
-import { money, date, statuses, useTask, imageUrl, imageError } from "../lib/shop";
+import { money, date, statuses, paymentStatuses, useTask, imageUrl, imageError } from "../lib/shop";
 import TaskState from "../components/TaskState.vue";
 import SearchMultiSelect from '../components/SearchMultiSelect.vue';
 const route = useRoute(),
@@ -386,6 +386,14 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
           <option value="false">Đơn hiện tại</option>
           <option value="true">Đã lưu trữ</option>
         </select>
+        <select
+          v-if="type === 'orders'"
+          v-model="filters.refundRequired"
+          aria-label="Lọc hoàn tiền"
+        >
+          <option value="">Mọi thanh toán</option>
+          <option value="true">Cần hoàn tiền</option>
+        </select>
         <button :disabled="busy">Tìm kiếm</button>
       </form>
       <template v-if="!type && stats"
@@ -398,6 +406,7 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
               products: 'Sản phẩm',
               users: 'Người dùng',
               lowStock: 'Sản phẩm sắp hết',
+              refundRequired: 'Đơn cần hoàn tiền',
             }"
             :key="key"
             class="panel"
@@ -587,7 +596,10 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
         <p>{{ selected.receiverName }} · {{ selected.receiverPhone }}</p>
         <p>{{ selected.receiverAddress }}</p>
         <p v-if="selected.note">Ghi chú: {{ selected.note }}</p>
-        <p>{{ selected.paymentMethod }} · {{ selected.paymentStatus }}</p>
+        <p>{{ selected.paymentMethod }} · {{ paymentStatuses[selected.paymentStatus] || selected.paymentStatus }}</p>
+        <p v-if="selected.refundRequired" class="notice error" role="alert">
+          Cần hoàn tiền: VNPay báo đã thu tiền sau khi đơn bị hủy hoặc hết hạn. Mã giao dịch VNPay: {{ selected.paymentReference || "—" }}.
+        </p>
         <div v-for="item in selected.items" :key="item.id" class="summary-row">
           <span>{{ item.name }}{{ item.variantLabel ? " · " + item.variantLabel : "" }} × {{ item.quantity }}</span
           ><strong>{{ money(item.price * item.quantity) }}</strong>
@@ -671,7 +683,7 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
                   >{{ money(row.totalPrice)
                   }}<small
                     >{{ statuses[row.status] }} ·
-                    {{ date(row.createdAt) }}</small
+                    {{ date(row.createdAt) }}<template v-if="row.refundRequired"> · <b class="refund-flag">Cần hoàn tiền</b></template></small
                   ></template
                 ><template v-else-if="type === 'users'"
                   >{{ row.role }} ·

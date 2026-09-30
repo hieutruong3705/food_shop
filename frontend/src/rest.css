@@ -98,6 +98,7 @@ small{color:var(--muted);font-size:13px}
 .notice.error{color:#98382f;background:#ffeded}
 .notice.success{color:#3b651c;background:#e7f3d5}
 .error-text{color:#9b342f}
+.refund-flag{color:#98382f}
 .pagination{justify-content:center;align-items:center;gap:22px;margin:35px 0;font-size:14px;display:flex}
 .pagination button{color:var(--green);border:1px solid var(--border);background:#fff}
 .breadcrumb{color:var(--muted);padding:15px 0 30px;font-size:13px}

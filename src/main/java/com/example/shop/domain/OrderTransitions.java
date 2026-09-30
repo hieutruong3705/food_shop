@@ -4,6 +4,7 @@ import java.util.List;
 public final class OrderTransitions {
     private OrderTransitions(){}
     public static List<String> allowed(Order order){
+        if(order.isRefundRequired())return List.of();
         var states=switch(order.getStatus()){
             case "PENDING" -> List.of("CONFIRMED","CANCELLED");
             case "CONFIRMED" -> List.of("SHIPPING","CANCELLED");

@@ -50,11 +50,19 @@ public class SandboxPaymentService {
         long id,amount;try{id=Long.parseLong(params.get("vnp_TxnRef"));amount=Long.parseLong(params.get("vnp_Amount"));}catch(Exception e){return reply("01","Order not found");}
         var optional=orders.lockById(id);if(optional.isEmpty())return reply("01","Order not found");Order o=optional.get();
         if(!"VNPAY".equals(o.getPaymentMethod()) || amount!=Math.round(o.getTotalPrice()*100))return reply("04","Invalid amount");
-        if(!"UNPAID".equals(o.getPaymentStatus()) || !"PENDING".equals(o.getStatus()))return reply("02","Order already confirmed");
-        if("00".equals(params.get("vnp_ResponseCode")) && "00".equals(params.get("vnp_TransactionStatus")))o.setPaymentStatus("PAID");
+        boolean paid="00".equals(params.get("vnp_ResponseCode")) && "00".equals(params.get("vnp_TransactionStatus"));
+        if(!"UNPAID".equals(o.getPaymentStatus()) || !"PENDING".equals(o.getStatus())){
+            // Money was taken after the order was cancelled or expired. Stock may already belong to
+            // someone else, so the order stays closed and the payment is flagged for a manual refund.
+            if(paid && isClosedWithoutPayment(o)){o.setPaymentStatus("REFUND_REQUIRED");o.setPaymentReference(reference(params));return reply("00","Confirmed");}
+            return reply("02","Order already confirmed");
+        }
+        if(paid){o.setPaymentStatus("PAID");o.setPaymentReference(reference(params));}
         else {o.setPaymentStatus("FAILED");release(o);}
         return reply("00","Confirmed");
     }
+    private static boolean isClosedWithoutPayment(Order o){return "CANCELLED".equals(o.getStatus()) && Set.of("UNPAID","EXPIRED","FAILED").contains(o.getPaymentStatus());}
+    private static String reference(Map<String,String> params){String value=params.get("vnp_TransactionNo");return value==null?null:value.substring(0,Math.min(value.length(),64));}
     @Transactional public void expire(long id){var optional=orders.lockById(id);if(optional.isEmpty())return;var o=optional.get();if("VNPAY".equals(o.getPaymentMethod()) && "PENDING".equals(o.getStatus()) && "UNPAID".equals(o.getPaymentStatus()) && o.getCreatedAt().toInstant().plusSeconds(1200).isBefore(Instant.now())){o.setPaymentStatus("EXPIRED");release(o);}}
     private void release(Order order){
         for(var d:order.getOrderDetails().stream().sorted(Comparator.comparingLong(i->i.getProduct().getId())).toList()){

@@ -97,7 +97,9 @@ Upload tại `/api/v1/admin/uploads`: PNG/JPEG/WebP tối đa 5 MB, kiểm tra c
 
 Mặc định tắt. Cần `VNPAY_ENABLED=true`, `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` do VNPay sandbox cấp, cùng `CLIENT_URL` của frontend. Chỉ cho phép endpoint sandbox; không có cấu hình thanh toán live.
 
-Đăng ký IPN `/api/v1/payments/vnpay/ipn` với VNPay. IPN kiểm tra HMAC, merchant, mã đơn, số tiền và trạng thái trước khi cập nhật. Trang return không tự đánh dấu đã thanh toán. Đơn chưa thanh toán hết hạn sau 20 phút và hoàn kho; link thanh toán có hạn 15 phút. Đơn online đã thanh toán không được hủy bằng luồng COD; cần quy trình hoàn tiền riêng trước khi triển khai thanh toán live.
+Đăng ký IPN `/api/v1/payments/vnpay/ipn` với VNPay. IPN kiểm tra HMAC, merchant, mã đơn, số tiền và trạng thái trước khi cập nhật. Trang return không tự đánh dấu đã thanh toán. Đơn chưa thanh toán hết hạn sau 20 phút và hoàn kho; link thanh toán có hạn 15 phút. Job hết hạn luôn chạy, kể cả khi tắt VNPay, để đơn VNPAY chưa trả không giữ kho vĩnh viễn. Đơn online đã thanh toán không được hủy bằng luồng COD; cần quy trình hoàn tiền riêng trước khi triển khai thanh toán live.
+
+IPN hợp lệ báo đã thu tiền nhưng đến sau khi đơn đã bị hủy hoặc hết hạn: hệ thống trả `RspCode 00` để VNPay ngừng gửi lại, đặt `paymentStatus=REFUND_REQUIRED`, lưu mã giao dịch VNPay vào `payment_reference` và không mở lại đơn hay trừ lại kho (kho có thể đã bán cho người khác). Admin thấy cảnh báo "Đơn cần hoàn tiền" trên bảng điều khiển, lọc được ở danh sách đơn, và đơn này không có thao tác chuyển trạng thái hay lưu trữ. Quy trình hoàn tiền vẫn làm thủ công trên cổng VNPay.
 
 Không có giao dịch với VNPay thật trong kiểm thử. Test tạo chữ ký giả lập cục bộ. Tham khảo [tài liệu tích hợp VNPay](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html).
 

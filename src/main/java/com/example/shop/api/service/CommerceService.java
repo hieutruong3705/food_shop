@@ -146,6 +146,7 @@ public class CommerceService {
     public OrderView archive(String email,long id,boolean archived){
         var order=requireOrder(email,id,true);
         if(!Set.of("COMPLETED","CANCELLED").contains(order.getStatus()))throw new IllegalArgumentException("Chỉ lưu trữ đơn đã kết thúc");
+        if(archived && order.isRefundRequired())throw new IllegalArgumentException("Đơn cần hoàn tiền chưa thể lưu trữ");
         order.setAdminArchived(archived);return CommerceResponse.order(order);
     }
     public OrderView status(String email,long id,String next,boolean admin) {

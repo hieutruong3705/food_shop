@@ -47,6 +47,9 @@ public class Order {
 
     private String paymentStatus;
 
+    @Column(length = 64)
+    private String paymentReference;
+
     private Date createdAt;
     @Temporal(TemporalType.TIMESTAMP)
     private Date completedAt;
@@ -126,6 +129,18 @@ public class Order {
 
     public void setPaymentStatus(String paymentStatus) {
         this.paymentStatus = paymentStatus;
+    }
+
+    public String getPaymentReference() {
+        return paymentReference;
+    }
+
+    public void setPaymentReference(String paymentReference) {
+        this.paymentReference = paymentReference;
+    }
+
+    public boolean isRefundRequired() {
+        return "REFUND_REQUIRED".equals(paymentStatus);
     }
 
     public Date getCreatedAt() {

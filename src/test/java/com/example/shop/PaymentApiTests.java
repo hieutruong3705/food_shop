@@ -27,7 +27,8 @@ class PaymentApiTests {
     @Autowired CommerceService commerce;@Autowired SandboxPaymentService payments;@Autowired UserRepository users;@Autowired RoleRepository roles;@Autowired ProductRepository products;@Autowired OrderRepository orders;
     User buyer;Product product;long orderId;
     @BeforeEach void setup(){var role=roles.findByName("USER");if(role==null){role=new Role();role.setName("USER");role=roles.save(role);}buyer=new User();buyer.setEmail(UUID.randomUUID()+"@test.local");buyer.setRole(role);buyer.setEnabled(true);buyer=users.save(buyer);product=new Product();product.setName("Sandbox test product");product.setPrice(2000000);product.setQuantity(2);product=products.save(product);commerce.add(buyer.getEmail(),new AddItem(product.getId(),1));orderId=commerce.checkout(buyer.getEmail(),UUID.randomUUID().toString(),new Checkout("Test","Test address","0909876543",null,"VNPAY")).id();}
-    Map<String,String> callback(String code,long amount)throws Exception {var fields=new TreeMap<String,String>();fields.put("vnp_TmnCode","TESTONLY");fields.put("vnp_TxnRef",Long.toString(orderId));fields.put("vnp_Amount",Long.toString(amount));fields.put("vnp_ResponseCode",code);fields.put("vnp_TransactionStatus",code);var mac=Mac.getInstance("HmacSHA512");mac.init(new SecretKeySpec("local-test-signing-key".getBytes(StandardCharsets.UTF_8),"HmacSHA512"));fields.put("vnp_SecureHash",HexFormat.of().formatHex(mac.doFinal(SandboxPaymentService.canonical(fields).getBytes(StandardCharsets.UTF_8))));return fields;}
+    Map<String,String> callback(String code,long amount)throws Exception {return callback(code,amount,Map.of());}
+    Map<String,String> callback(String code,long amount,Map<String,String> extra)throws Exception {var fields=new TreeMap<String,String>(extra);fields.put("vnp_TmnCode","TESTONLY");fields.put("vnp_TxnRef",Long.toString(orderId));fields.put("vnp_Amount",Long.toString(amount));fields.put("vnp_ResponseCode",code);fields.put("vnp_TransactionStatus",code);var mac=Mac.getInstance("HmacSHA512");mac.init(new SecretKeySpec("local-test-signing-key".getBytes(StandardCharsets.UTF_8),"HmacSHA512"));fields.put("vnp_SecureHash",HexFormat.of().formatHex(mac.doFinal(SandboxPaymentService.canonical(fields).getBytes(StandardCharsets.UTF_8))));return fields;}
     @Test void signatureAmountAndReplayAreChecked()throws Exception{
         assertThat(payments.ipn(Map.of("vnp_TxnRef",Long.toString(orderId))).get("RspCode")).isEqualTo("97");
         assertThat(payments.ipn(callback("00",1)).get("RspCode")).isEqualTo("04");
@@ -40,5 +41,53 @@ class PaymentApiTests {
     @Test void paymentLinkUsesSandboxAndUnpaidOrdersCannotShip(){
         var order=orders.findById(orderId).orElseThrow();assertThat(payments.paymentUrl(order,"127.0.0.1")).startsWith("https://sandbox.vnpayment.vn/").contains("vnp_SecureHash=");
         assertThatThrownBy(()->commerce.status(buyer.getEmail(),orderId,"CONFIRMED",true)).isInstanceOf(IllegalArgumentException.class);
+    }
+    /** Moves the order's creation time back so the 20-minute payment window has passed. */
+    void age(long id,long minutes){var order=orders.findById(id).orElseThrow();order.setCreatedAt(java.util.Date.from(java.time.Instant.now().minus(java.time.Duration.ofMinutes(minutes))));orders.saveAndFlush(order);}
+    long stock(){return products.findById(product.getId()).orElseThrow().getQuantity();}
+    @Test void lateIpnAfterExpiryRequestsRefundWithoutReopeningTheOrder()throws Exception{
+        age(orderId,25);payments.expire(orderId);
+        var expired=orders.findById(orderId).orElseThrow();
+        assertThat(expired.getStatus()).isEqualTo("CANCELLED");assertThat(expired.getPaymentStatus()).isEqualTo("EXPIRED");
+        long stockAfterExpiry=stock();assertThat(stockAfterExpiry).isEqualTo(2);
+
+        var late=callback("00",200000000,Map.of("vnp_TransactionNo","14567890"));
+        assertThat(payments.ipn(late).get("RspCode")).isEqualTo("00");
+        var refund=orders.findById(orderId).orElseThrow();
+        assertThat(refund.getPaymentStatus()).isEqualTo("REFUND_REQUIRED");assertThat(refund.getStatus()).isEqualTo("CANCELLED");
+        assertThat(refund.getPaymentReference()).isEqualTo("14567890");
+        assertThat(stock()).isEqualTo(stockAfterExpiry);
+        assertThat(OrderTransitions.allowed(refund)).isEmpty();
+        var view=commerce.detail(buyer.getEmail(),orderId,true);
+        assertThat(view.refundRequired()).isTrue();assertThat(view.paymentReference()).isEqualTo("14567890");assertThat(view.allowedStatuses()).isEmpty();
+    }
+    @Test void repeatedLateIpnIsAcknowledgedAsAlreadyHandledAndChangesNothing()throws Exception{
+        age(orderId,25);payments.expire(orderId);
+        assertThat(payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","111"))).get("RspCode")).isEqualTo("00");
+        assertThat(payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","222"))).get("RspCode")).isEqualTo("02");
+        var order=orders.findById(orderId).orElseThrow();
+        assertThat(order.getPaymentStatus()).isEqualTo("REFUND_REQUIRED");assertThat(order.getPaymentReference()).isEqualTo("111");
+        assertThat(order.getStatus()).isEqualTo("CANCELLED");assertThat(stock()).isEqualTo(2);
+    }
+    @Test void lateFailureIpnAfterExpiryIsIgnoredBecauseNoMoneyMoved()throws Exception{
+        age(orderId,25);payments.expire(orderId);
+        assertThat(payments.ipn(callback("24",200000000)).get("RspCode")).isEqualTo("02");
+        var order=orders.findById(orderId).orElseThrow();
+        assertThat(order.getPaymentStatus()).isEqualTo("EXPIRED");assertThat(order.getPaymentReference()).isNull();assertThat(stock()).isEqualTo(2);
+    }
+    @Test void paymentAfterCustomerCancellationAlsoRequiresRefund()throws Exception{
+        commerce.status(buyer.getEmail(),orderId,"CANCELLED",false);
+        assertThat(payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","333"))).get("RspCode")).isEqualTo("00");
+        var order=orders.findById(orderId).orElseThrow();
+        assertThat(order.getStatus()).isEqualTo("CANCELLED");assertThat(order.getPaymentStatus()).isEqualTo("REFUND_REQUIRED");assertThat(stock()).isEqualTo(2);
+    }
+    @Test void refundRequiredOrdersCannotBeArchivedOutOfTheAdminQueue()throws Exception{
+        age(orderId,25);payments.expire(orderId);payments.ipn(callback("00",200000000));
+        assertThatThrownBy(()->commerce.archive(buyer.getEmail(),orderId,true)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("hoàn tiền");
+    }
+    @Test void ordinaryPaymentStoresTheVnpayTransactionNumber()throws Exception{
+        assertThat(payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","999"))).get("RspCode")).isEqualTo("00");
+        var order=orders.findById(orderId).orElseThrow();
+        assertThat(order.getPaymentStatus()).isEqualTo("PAID");assertThat(order.getPaymentReference()).isEqualTo("999");
     }
 }

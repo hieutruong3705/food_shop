@@ -1,10 +1,10 @@
 package com.example.shop.config;
 import com.example.shop.repository.OrderRepository;
 import com.example.shop.api.service.SandboxPaymentService;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.*;
-@Configuration @EnableScheduling @ConditionalOnProperty(name="shop.vnpay.enabled",havingValue="true")
+/** Always runs: unpaid VNPAY orders must release stock even after VNPay has been switched off. */
+@Configuration @EnableScheduling
 public class PaymentExpiryJob {
     private final OrderRepository orders;private final SandboxPaymentService payments;
     public PaymentExpiryJob(OrderRepository o,SandboxPaymentService p){orders=o;payments=p;}
