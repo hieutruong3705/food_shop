@@ -38,7 +38,7 @@ onUnmounted(()=>{clearInterval(timer);document.removeEventListener('visibilitych
     <OfferCarousel class="voucher-card" label="Mã giảm giá" item-key="code" :items="offers.vouchers" @change="copied=''">
       <template #default="{item:voucher}">
         <strong class="offer-percent">Giảm {{ voucher.discount }}%</strong><button class="voucher-code" :aria-label="`Sao chép mã ${voucher.code}`" @click="copy(voucher.code)">{{ voucher.code }} <span>⧉</span></button><small>Đơn từ {{ money(voucher.minimumOrder) }}<template v-if="voucher.maximumDiscount"> · Giảm tối đa {{ money(voucher.maximumDiscount) }}</template></small>
-        <details><summary>Điều kiện áp dụng</summary><p>{{ voucher.scopeType==='ALL'?'Tất cả sản phẩm':({CATEGORY:'Danh mục',BRAND:'Thương hiệu',PRODUCT:'Sản phẩm'}[voucher.scopeType]+': '+(voucher.scopeNames||[]).join(', ')) }}<br /><template v-if="voucher.endDate">Hạn dùng: {{ date(voucher.endDate) }}.</template> Kiểm tra lại điều kiện khi đặt hàng.</p></details><span v-if="copied" role="status">{{ copied }}</span>
+        <details><summary>Điều kiện áp dụng</summary><p>{{ voucher.scopeDescription }}<br /><template v-if="voucher.endDate">Hạn dùng: {{ date(voucher.endDate) }}.</template> Kiểm tra lại điều kiện khi đặt hàng.</p></details><span v-if="copied" role="status">{{ copied }}</span>
       </template>
       <template #empty><h2>Mã giảm giá TechShop</h2><p>{{ error?'Chưa tải được mã giảm giá.':'Chưa có mã giảm giá còn hiệu lực. Hãy quay lại sau nhé.' }}</p></template>
       <template #footer><button v-if="error" class="text-button" @click="loadOffers">Thử lại</button></template>

@@ -48,27 +48,33 @@ test('category brands, scoped offers and warranty sliders persist through the ad
     await expect(page.getByLabel('Thương hiệu',{exact:true})).toHaveValue('');
     await expect(page.getByLabel('Thương hiệu',{exact:true}).locator('option:not([disabled])')).toHaveText([new RegExp(key+' C')]);
 
-    // Both scope forms share the same searchable component and must round-trip all four choices.
+    // Shared scope editor: CATALOG intersects groups, PRODUCT selects explicit items.
     for(const type of ['promotions','vouchers']){
       const id=await create(type,{name:key,code:key,discountRate:10,discount:10,scopeType:'ALL',active:true,startDate:new Date(Date.now()-3600000).toISOString(),endDate:new Date(Date.now()+86400000).toISOString()});
-      for(const [scope,label,name,field,ids] of [
-        ['CATEGORY','Danh mục áp dụng',key,'categoryIds',[category,otherCategory]],
-        ['BRAND','Thương hiệu áp dụng',key+' A','brandIds',[brandA]],
-        ['PRODUCT','Sản phẩm áp dụng',key+'-0','productIds',[productIds[0]]],
-        ['ALL',null,null,null,[]],
-      ]){
-        await edit(type,id);await page.getByRole('combobox',{name:'Phạm vi áp dụng',exact:true}).selectOption(scope);
-        await expect(page.locator('.search-multi')).toHaveCount(scope==='ALL'?0:1);
-        if(scope==='CATEGORY'){
-          const selector=page.getByRole('region',{name:label,exact:true});await selector.getByRole('searchbox').fill(name);
+      for(const scope of ['CATALOG','PRODUCT','ALL']){
+        await edit(type,id);
+        const label={CATALOG:'Theo danh mục và thương hiệu',PRODUCT:'Sản phẩm cụ thể',ALL:'Toàn bộ cửa hàng'}[scope];
+        await page.getByRole('button',{name:new RegExp('^'+label)}).click();
+        await expect(page.locator('.search-multi')).toHaveCount(scope==='ALL'?0:scope==='CATALOG'?2:1);
+        if(scope==='CATALOG'){
+          const selector=page.getByRole('region',{name:'Danh mục áp dụng',exact:true});
+          await selector.getByRole('searchbox').fill(key);
           await selector.getByRole('checkbox',{name:new RegExp('^'+key+' #')}).check();
-          await selector.getByRole('checkbox',{name:new RegExp('^'+key+' other #')}).check();
-        }else if(label)await choose(label,name);
+          await selector.getByRole('button',{name:'Đóng danh sách',exact:true}).click();
+          await choose('Thương hiệu áp dụng',key+' A');
+          await expect(page.locator('.scope-preview')).toContainText('Áp dụng cho 2 sản phẩm');
+        }else if(scope==='PRODUCT'){
+          await choose('Sản phẩm áp dụng',key+'-0');
+          await expect(page.locator('.scope-preview')).toContainText('Áp dụng cho 1 sản phẩm');
+          await expect(page.locator('.scope-samples img')).toHaveCount(1);
+        }
         await save();
         const saved=await detail(type,id);expect(saved.scopeType).toBe(scope);
-        for(const f of ['categoryIds','brandIds','productIds'])expect(saved[f].sort()).toEqual(f===field?ids.sort():[]);
-        await edit(type,id);await expect(page.getByRole('combobox',{name:'Phạm vi áp dụng',exact:true})).toHaveValue(scope);
-        if(label)await expect(page.getByRole('region',{name:label,exact:true}).locator('.selection-chips button')).toHaveCount(ids.length);
+        expect(saved.categoryIds).toEqual(scope==='CATALOG'?[category]:[]);
+        expect(saved.brandIds).toEqual(scope==='CATALOG'?[brandA]:[]);
+        expect(saved.productIds).toEqual(scope==='PRODUCT'?[productIds[0]]:[]);
+        await edit(type,id);
+        await expect(page.getByRole('button',{name:new RegExp('^'+label)})).toHaveAttribute('aria-pressed','true');
         if(type==='promotions'){
           const result=await(await page.request.get('/api/v1/products?categoryId='+category+'&promotionId='+id)).json();
           expect(result.totalElements).toBe(scope==='PRODUCT'?1:2);

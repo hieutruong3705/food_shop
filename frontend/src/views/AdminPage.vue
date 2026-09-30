@@ -6,6 +6,7 @@ import { resources } from "../lib/admin";
 import { money, date, statuses, paymentStatuses, useTask, imageUrl, imageError } from "../lib/shop";
 import TaskState from "../components/TaskState.vue";
 import SearchMultiSelect from '../components/SearchMultiSelect.vue';
+import ScopePicker from '../components/ScopePicker.vue';
 const route = useRoute(),
   type = computed(() => route.params.resource || ""),
   config = computed(() => resources[type.value]),
@@ -153,11 +154,7 @@ function save() {
     message.value = "Đã lưu thay đổi.";
   });
 }
-const scopeResource=computed(()=>({CATEGORY:'categories',BRAND:'brands',PRODUCT:'products'})[form.value.scopeType]);
-const scopeKey=computed(()=>({CATEGORY:'categoryIds',BRAND:'brandIds',PRODUCT:'productIds'})[form.value.scopeType]);
-const scopeLabel=computed(()=>({CATEGORY:'Danh mục áp dụng',BRAND:'Thương hiệu áp dụng',PRODUCT:'Sản phẩm áp dụng'})[form.value.scopeType]);
-function scopeSummary(row){const key={CATEGORY:'categoryIds',BRAND:'brandIds',PRODUCT:'productIds'}[row.scopeType];const label={ALL:'Tất cả sản phẩm',CATEGORY:'Theo danh mục',BRAND:'Theo thương hiệu',PRODUCT:'Theo sản phẩm'}[row.scopeType]||'';return key?`${label} (${row[key]?.length||0})`:label;}
-function scopeChanged(){form.value.categoryIds=[];form.value.brandIds=[];form.value.productIds=[];}
+function scopeSummary(row){if(row.scopeType==='ALL')return 'Tất cả sản phẩm';if(row.scopeType==='PRODUCT')return 'Sản phẩm ('+(row.productIds?.length||0)+')';return [row.categoryIds?.length?'Danh mục ('+row.categoryIds.length+')':'',row.brandIds?.length?'Thương hiệu ('+row.brandIds.length+')':''].filter(Boolean).join(' · ');}
 let brandRequest=0;
 async function loadProductBrands(clear=true){
   const request=++brandRequest;choices.value.brands=[];if(clear)form.value.brandId='';
@@ -401,7 +398,9 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
           <article
             v-for="(label, key) in {
               revenue: 'Doanh thu hoàn thành',
-              orders: 'Đơn hàng',
+              newOrders: 'Đơn phát sinh (trừ đơn hủy)',
+              completedOrders: 'Đơn hoàn thành trong kỳ',
+              cancelledOrders: 'Đơn tạo trong kỳ đã hủy',
               pending: 'Chờ xác nhận',
               products: 'Sản phẩm',
               users: 'Người dùng',
@@ -538,10 +537,7 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
             :disabled="busy" /></label
         >
         <SearchMultiSelect v-if="type==='categories'" v-model="form.brandIds" resource="brands" label="Thương hiệu áp dụng" />
-        <section v-if="['promotions','vouchers'].includes(type)" class="offer-scope">
-          <label>Phạm vi áp dụng<select v-model="form.scopeType" @change="scopeChanged"><option value="ALL">Tất cả sản phẩm</option><option value="CATEGORY">Theo danh mục</option><option value="BRAND">Theo thương hiệu</option><option value="PRODUCT">Theo sản phẩm</option></select></label>
-          <SearchMultiSelect v-if="scopeResource" :key="scopeResource" v-model="form[scopeKey]" :resource="scopeResource" :label="scopeLabel" />
-        </section>
+        <ScopePicker v-if="['promotions','vouchers'].includes(type)" v-model="form" :kind="type === 'vouchers' ? 'voucher' : 'promotion'" />
         <p v-if="type==='products'&&form.categoryId&&!choices.brands.length" class="notice">Danh mục chưa gán thương hiệu. Hãy chọn hãng tại Quản trị → Danh mục trước khi lưu sản phẩm.</p>
         <section v-if="imageField" class="image-preview-section" aria-label="Xem trước ảnh">
           <p v-if="type === 'categories'" class="muted">Icon sẽ hiển thị ở menu danh mục và trang chủ. Nên dùng ảnh vuông, nền trong suốt.</p>
