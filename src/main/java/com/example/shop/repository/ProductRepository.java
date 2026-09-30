@@ -18,6 +18,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, org.spr
     @Query("select p from Product p where p.id = :id")
     java.util.Optional<Product> lockById(@org.springframework.data.repository.query.Param("id") long id);
     boolean existsBySku(String sku);
+    /** SKUs are unique regardless of case, whatever the database collation says. */
+    java.util.List<Product> findAllBySkuIgnoreCase(String sku);
 
     List<Product> findByNameContainingIgnoreCaseAndCategoryId(String name, Long categoryId);
 

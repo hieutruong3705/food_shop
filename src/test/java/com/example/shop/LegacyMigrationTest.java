@@ -7,7 +7,7 @@ import org.springframework.core.io.ClassPathResource;
 import java.sql.DriverManager;
 import static org.assertj.core.api.Assertions.*;
 
-@EnabledIfEnvironmentVariable(named="MIGRATION_TEST_URL",matches="jdbc:mysql://127\\.0\\.0\\.1:3307/techshop_migration_[a-z0-9]+.*")
+@EnabledIfEnvironmentVariable(named="MIGRATION_TEST_URL",matches="jdbc:mysql://127\\.0\\.0\\.1:330[78]/techshop_migration_[a-z0-9]+.*")
 class LegacyMigrationTest {
     @Test void baselinesLegacySchemaWithoutReinterpretingData()throws Exception{
         String url=System.getenv("MIGRATION_TEST_URL"),user=System.getenv("MIGRATION_TEST_USERNAME"),password=System.getenv("MIGRATION_TEST_PASSWORD");
@@ -28,12 +28,12 @@ class LegacyMigrationTest {
             }
         }
         var flyway=Flyway.configure().dataSource(url,user,password).baselineOnMigrate(true).baselineVersion("1").load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(5);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(9);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         try(var connection=DriverManager.getConnection(url,user,password);var s=connection.createStatement()){
             try(var r=s.executeQuery("SELECT COUNT(*) FROM category_brands WHERE category_id=1 AND brand_id=1")){r.next();assertThat(r.getInt(1)).isEqualTo(1);}
             try(var r=s.executeQuery("SELECT scope_type FROM vouchers WHERE id=1")){r.next();assertThat(r.getString(1)).isEqualTo("ALL");}
-            try(var r=s.executeQuery("SELECT COUNT(*) FROM promotions WHERE scope_type='BRAND'")){r.next();assertThat(r.getInt(1)).isEqualTo(2);}
+            try(var r=s.executeQuery("SELECT COUNT(*) FROM promotions WHERE scope_type='CATALOG'")){r.next();assertThat(r.getInt(1)).isEqualTo(2);}
             try(var r=s.executeQuery("SELECT p.discount_rate FROM promotions p JOIN product_promotion x ON x.promotion_id=p.id WHERE p.scope_type='PRODUCT' AND x.product_id=1")){r.next();assertThat(r.getDouble(1)).isEqualTo(7);}
             try(var r=s.executeQuery("SELECT variant_id,variant_label FROM order_details WHERE id=1")){assertThat(r.next()).isTrue();assertThat(r.getObject(1)).isNull();assertThat(r.getString(2)).isNull();}
             try(var r=s.executeQuery("SELECT COUNT(*) FROM product_variants")){assertThat(r.next()).isTrue();assertThat(r.getLong(1)).isZero();}

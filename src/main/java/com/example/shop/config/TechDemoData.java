@@ -45,7 +45,7 @@ public class TechDemoData implements CommandLineRunner {
             var image=new ProductImage();image.setProduct(p);image.setImageUrl("/tech/accessory.svg");p.getImages().add(image);ensureBrand(p);products.save(p);
         }
         if(promotions.findAll().stream().noneMatch(p->"TECH-DEMO-ORBIT".equals(p.getName()))){
-            var promotion=new Promotion();promotion.setName("TECH-DEMO-ORBIT");promotion.setDescription("Giảm 5% phụ kiện Orbit Demo");promotion.setDiscountRate(5);promotion.setStartDate(new java.util.Date());promotion.setEndDate(java.util.Date.from(java.time.Instant.now().plus(365,java.time.temporal.ChronoUnit.DAYS)));promotion.setScopeType(ScopeType.BRAND);promotion.setBrands(java.util.List.of(orbit));promotion.setProducts(java.util.List.of());promotions.save(promotion);
+            var promotion=new Promotion();promotion.setName("TECH-DEMO-ORBIT");promotion.setDescription("Giảm 5% phụ kiện Orbit Demo");promotion.setDiscountRate(5);promotion.setStartDate(new java.util.Date());promotion.setEndDate(java.util.Date.from(java.time.Instant.now().plus(365,java.time.temporal.ChronoUnit.DAYS)));promotion.setScopeType(ScopeType.CATALOG);promotion.setBrands(java.util.List.of(orbit));promotion.setProducts(java.util.List.of());promotions.save(promotion);
         }
         if(banners.findAll().stream().noneMatch(b->"TechShop Demo - Phụ kiện".equals(b.getName()))){var b=new Banner();b.setName("TechShop Demo - Phụ kiện");b.setImageUrl("/tech/accessory.svg");b.setLink("/products?brandId="+orbit.getId());b.setActive(true);b.setTechnologyCatalog(true);banners.save(b);}
         if(!products.existsBySku("TECH-DEMO-VARIANTS")){

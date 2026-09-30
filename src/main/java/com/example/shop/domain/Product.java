@@ -38,6 +38,7 @@ public class Product implements Serializable {
     private double price;
     @OneToMany(mappedBy="product",cascade=CascadeType.ALL)
     @OrderBy("id ASC")
+    @org.hibernate.annotations.BatchSize(size = 50)
     private List<ProductVariant> variants=new ArrayList<>();
     public List<ProductVariant> getVariants(){return variants;}
     public boolean hasVariants(){return !variants.isEmpty();}
@@ -48,6 +49,7 @@ public class Product implements Serializable {
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("sortOrder ASC, id ASC")
+    @org.hibernate.annotations.BatchSize(size = 50)
     private List<ProductImage> images = new ArrayList<>();
 
     @Column(columnDefinition = "TEXT")
@@ -66,6 +68,7 @@ public class Product implements Serializable {
     private Category category;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @org.hibernate.annotations.BatchSize(size = 50)
     private List<ProductSpec> specs = new ArrayList<>();
 
     // --- PHẦN MỚI THÊM: LIÊN KẾT VỚI PROMOTION (KHUYẾN MÃI) ---
@@ -88,31 +91,7 @@ public class Product implements Serializable {
     public Product() {
     }
 
-    // --- LOGIC TÍNH GIÁ KHUYẾN MÃI (Transient: Không lưu vào DB) ---
-
-    // Tính giá thực tế sau khi giảm (Dùng để bán và hiển thị)
-    @Transient
-    public double getDiscountedPrice() {
-        return discountedPrice(this.price);
-    }
-    @Formula("(select coalesce(max(pr.discount_rate),0) from promotions pr where pr.active=true and pr.start_date<current_timestamp and pr.end_date>current_timestamp and (pr.scope_type='ALL' or (pr.scope_type='PRODUCT' and exists(select 1 from product_promotion pp where pp.promotion_id=pr.id and pp.product_id=id)) or (pr.scope_type='BRAND' and exists(select 1 from brand_promotion bp where bp.promotion_id=pr.id and bp.brand_id=brand_id)) or (pr.scope_type='CATEGORY' and exists(select 1 from promotion_category pc where pc.promotion_id=pr.id and pc.category_id=category_id))))")
-    private double activePromotionDiscount;
-    public double discountedPrice(double currentPrice) {
-        return activePromotionDiscount>0?Math.round(currentPrice*(1-Math.min(100,activePromotionDiscount)/100)):currentPrice;
-    }
-    // Kiểm tra xem sản phẩm có đang được giảm giá không (để hiện nhãn SALE)
-    @Transient
-    public boolean isOnSale() {
-        return this.getDiscountedPrice() < this.price;
-    }
-
-    // Lấy phần trăm giảm giá để hiển thị (Ví dụ: -20%)
-    @Transient
-    public int getDiscountPercentage() {
-        if (!isOnSale())
-            return 0;
-        return (int) Math.round(((this.price - getDiscountedPrice()) / this.price) * 100);
-    }
+    // The sale price is not stored or computed here: PromotionPricing applies the running promotions.
 
     // --- GETTER & SETTER ---
 

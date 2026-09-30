@@ -25,11 +25,14 @@ public class CatalogApiController {
     private final com.example.shop.repository.ProductRepository products;
     private final com.example.shop.repository.BrandRepository brands;
     private final java.time.Clock clock;
-    public CatalogApiController(ProductService productService, CategoryService categoryService, BannerService bannerService, com.example.shop.repository.ProductRepository products, com.example.shop.repository.BrandRepository brands, java.time.Clock clock) {
+    private final com.example.shop.api.service.PromotionPricing pricing;
+    @org.springframework.beans.factory.annotation.Autowired private com.example.shop.repository.PromotionRepository promotions;
+    public CatalogApiController(ProductService productService, CategoryService categoryService, BannerService bannerService, com.example.shop.repository.ProductRepository products, com.example.shop.repository.BrandRepository brands, java.time.Clock clock, com.example.shop.api.service.PromotionPricing pricing) {
         this.productService = productService; this.categoryService = categoryService; this.bannerService = bannerService;
-        this.products=products; this.brands=brands; this.clock=clock;
+        this.products=products; this.brands=brands; this.clock=clock; this.pricing=pricing;
     }
     @GetMapping("/products")
+    @org.springframework.transaction.annotation.Transactional(readOnly=true)
     public org.springframework.data.domain.Page<ProductSummaryResponse> products(@RequestParam(defaultValue="") String search,
             @RequestParam(required=false) Long categoryId, @RequestParam(required=false) Long brandId,
             @RequestParam(required=false) Double minPrice, @RequestParam(required=false) Double maxPrice,
@@ -43,6 +46,8 @@ public class CatalogApiController {
         var specs = parameters.entrySet().stream().filter(e -> e.getKey().startsWith("spec.")).toList();
         if((minWarranty!=null&&(minWarranty<0||minWarranty>120))||(maxWarranty!=null&&(maxWarranty<0||maxWarranty>120))||(minWarranty!=null&&maxWarranty!=null&&minWarranty>maxWarranty))throw new IllegalArgumentException("Khoảng bảo hành không hợp lệ");
         if (specs.size()>24 || (brandIds!=null && brandIds.size()>60) || specs.stream().anyMatch(e -> e.getKey().length()>105 || e.getKey().length()==5 || e.getValue().size()>60 || e.getValue().stream().anyMatch(v -> v.length()>500))) throw new IllegalArgumentException("Bộ lọc không hợp lệ");
+        var discounts=pricing.current();
+        var runningPromotions=promotionId==null?java.util.List.<com.example.shop.domain.Promotion>of():promotions.findRunning(java.util.Date.from(clock.instant()));
         return products.findAll((root,q,cb) -> {
             // Availability is the primary order, before pagination and the chosen sort.
             if(q.getResultType()!=Long.class && q.getResultType()!=long.class) {
@@ -65,15 +70,9 @@ public class CatalogApiController {
             if(minWarranty!=null)filters.add(cb.ge(root.get("warrantyMonths"),minWarranty));
             if(maxWarranty!=null)filters.add(cb.le(root.get("warrantyMonths"),maxWarranty));
             if(promotionId!=null) {
-                var sub=q.subquery(Long.class);var offer=sub.from(com.example.shop.domain.Promotion.class);
-                var offerProducts=offer.join("products",jakarta.persistence.criteria.JoinType.LEFT);var offerBrands=offer.join("brands",jakarta.persistence.criteria.JoinType.LEFT);var offerCategories=offer.join("categories",jakarta.persistence.criteria.JoinType.LEFT);var now=java.util.Date.from(clock.instant());
-                sub.select(offer.get("id")).where(cb.equal(offer.get("id"),promotionId),cb.isTrue(offer.get("active")),
-                    cb.lessThan(offer.get("startDate"),now),cb.greaterThan(offer.get("endDate"),now),
-                    cb.or(cb.equal(offer.get("scopeType"),com.example.shop.domain.ScopeType.ALL),
-                        cb.and(cb.equal(offer.get("scopeType"),com.example.shop.domain.ScopeType.PRODUCT),cb.equal(offerProducts.get("id"),root.get("id"))),
-                        cb.and(cb.equal(offer.get("scopeType"),com.example.shop.domain.ScopeType.BRAND),cb.equal(offerBrands.get("id"),root.get("brand").get("id"))),
-                        cb.and(cb.equal(offer.get("scopeType"),com.example.shop.domain.ScopeType.CATEGORY),cb.equal(offerCategories.get("id"),root.get("category").get("id")))));
-                filters.add(cb.exists(sub));
+                // Same rule as the sale price: a promotion that is not running selects nothing.
+                var offer=runningPromotions.stream().filter(p->p.getId()==promotionId).findFirst();
+                filters.add(offer.isPresent()?offer.get().scope().predicate(root,cb):cb.disjunction());
             }
             for (var entry : specs) {
                 var sub = q.subquery(Long.class);
@@ -84,24 +83,25 @@ public class CatalogApiController {
             if(minPrice!=null) filters.add(cb.ge(root.get("price"),minPrice));
             if(maxPrice!=null) filters.add(cb.le(root.get("price"),maxPrice));
             return cb.and(filters.toArray(jakarta.persistence.criteria.Predicate[]::new));
-        },org.springframework.data.domain.PageRequest.of(page,size)).map(ProductSummaryResponse::from);
+        },org.springframework.data.domain.PageRequest.of(page,size)).map(p->ProductSummaryResponse.from(p,discounts));
     }
     @GetMapping("/brands") public List<Map<String,Object>> brands() { return brands.findAll().stream().map(b -> Map.<String,Object>of("id",b.getId(),"name",b.getName(),"logoUrl",b.getLogoUrl()==null?"":b.getLogoUrl())).toList(); }
     @GetMapping("/catalog/menu")
     @org.springframework.transaction.annotation.Transactional(readOnly=true)
     public Map<String,Object> menu(@RequestParam long categoryId) {
         if(categoryId<1)throw new IllegalArgumentException("Danh mục không hợp lệ");
+        var discounts=pricing.current();
         var result=new java.util.LinkedHashMap<>(facets(categoryId));
         var ranking=orderDetails.topSales(categoryId,org.springframework.data.domain.PageRequest.of(0,10));
         var byId=products.findAllById(ranking.stream().map(r -> r.getProductId()).toList()).stream().collect(java.util.stream.Collectors.toMap(p -> p.getId(),p -> p));
         var selected=new java.util.ArrayList<Map<String,Object>>();
-        for(var rank:ranking) {var p=byId.get(rank.getProductId());if(p!=null)selected.add(Map.of("product",ProductSummaryResponse.from(p),"units",rank.getUnits()));}
+        for(var rank:ranking) {var p=byId.get(rank.getProductId());if(p!=null)selected.add(Map.of("product",ProductSummaryResponse.from(p,discounts),"units",rank.getUnits()));}
         if(selected.isEmpty()) {
             var latest=products.findAll((root,q,cb)->{
                 if(q.getResultType()!=Long.class)q.orderBy(cb.asc(cb.<Integer>selectCase().when(cb.gt(root.get("quantity"),0),0).otherwise(1)),cb.desc(root.get("id")));
                 return cb.and(cb.isTrue(root.get("active")),cb.isTrue(root.get("technologyCatalog")),cb.equal(root.get("category").get("id"),categoryId));
             },org.springframework.data.domain.PageRequest.of(0,10));
-            latest.forEach(p -> selected.add(Map.of("product",ProductSummaryResponse.from(p),"units",0L)));
+            latest.forEach(p -> selected.add(Map.of("product",ProductSummaryResponse.from(p,discounts),"units",0L)));
         }
         result.put("bestSellers",selected);result.put("rankingSource",ranking.isEmpty()?"newest":"sales");return result;
     }

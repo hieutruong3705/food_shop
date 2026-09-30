@@ -36,7 +36,7 @@ class ExperienceApiTests {
         mvc.perform(get("/api/v1/catalog/menu").param("categoryId",Long.toString(emptySales.getId()))).andExpect(status().isOk()).andExpect(jsonPath("$.rankingSource").value("newest")).andExpect(jsonPath("$.bestSellers.length()").value(1));
     }
     @Test void offersRespectDatesLimitsAndPromotionFilter()throws Exception{
-        var p=product(category());var offer=new Promotion();offer.setName("Live offer");offer.setDiscountRate(7);offer.setStartDate(new Date(System.currentTimeMillis()-10000));offer.setEndDate(new Date(System.currentTimeMillis()+100000));offer.setProducts(List.of(p));offer.setBrands(List.of());promotions.save(offer);
+        var p=product(category());var offer=new Promotion();offer.setScopeType(ScopeType.PRODUCT);offer.setName("Live offer");offer.setDiscountRate(7);offer.setStartDate(new Date(System.currentTimeMillis()-10000));offer.setEndDate(new Date(System.currentTimeMillis()+100000));offer.setProducts(List.of(p));offer.setBrands(List.of());promotions.save(offer);
         var v=new Voucher();v.setCode("LIVE-"+UUID.randomUUID());v.setDiscount(10);v.setAll(true);v.setUsageLimit(1L);vouchers.save(v);
         var exhausted=new Voucher();exhausted.setCode("EXHAUSTED-"+UUID.randomUUID());exhausted.setDiscount(99);exhausted.setAll(true);exhausted.setUsageLimit(1L);exhausted.setUsedCount(1);vouchers.save(exhausted);em.flush();em.clear();
         mvc.perform(get("/api/v1/offers")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString(v.getCode()))).andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(exhausted.getCode()))));
@@ -47,7 +47,7 @@ class ExperienceApiTests {
     }
     @Test void offersKeepEveryVoucherAndDisclosePromotionsWhoseProductsAreStopped()throws Exception{
         var p=product(category());p.setActive(false);
-        var offer=new Promotion();offer.setName("Paused products promotion");offer.setDiscountRate(5);offer.setStartDate(new Date(System.currentTimeMillis()-10000));offer.setEndDate(new Date(System.currentTimeMillis()+100000));offer.setProducts(List.of(p));offer.setBrands(List.of());promotions.save(offer);
+        var offer=new Promotion();offer.setScopeType(ScopeType.PRODUCT);offer.setName("Paused products promotion");offer.setDiscountRate(5);offer.setStartDate(new Date(System.currentTimeMillis()-10000));offer.setEndDate(new Date(System.currentTimeMillis()+100000));offer.setProducts(List.of(p));offer.setBrands(List.of());promotions.save(offer);
         var codes=new ArrayList<String>();
         for(int i=0;i<8;i++){var v=new Voucher();v.setCode("ROTATE-"+UUID.randomUUID());v.setDiscount(i+1);v.setAll(true);vouchers.save(v);codes.add(v.getCode());}
         em.flush();em.clear();

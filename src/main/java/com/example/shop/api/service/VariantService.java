@@ -11,6 +11,7 @@ import java.util.*;
 @Service @Transactional
 public class VariantService {
     @PersistenceContext private EntityManager em;
+    @org.springframework.beans.factory.annotation.Autowired private SkuService skuService;
     private final ProductVariantRepository variants;
     private final ProductRepository products;
     private final OrderDetailRepository details;
@@ -28,7 +29,8 @@ public class VariantService {
                 v=p.getVariants().stream().filter(x->Objects.equals(x.getId(),id)).findFirst().orElseThrow(()->new IllegalArgumentException("Phiên bản không thuộc sản phẩm"));
             }else{v=new ProductVariant();v.setProduct(p);}
             String sku=text(row.path("sku"),80);
-            if(!skus.add(sku.toUpperCase(Locale.ROOT)) || sku.equalsIgnoreCase(p.getSku()) || products.existsBySku(sku))throw new IllegalArgumentException("SKU phiên bản bị trùng với sản phẩm hoặc phiên bản khác");
+            if(!skus.add(sku.toUpperCase(Locale.ROOT)) || sku.equalsIgnoreCase(p.getSku()))throw new IllegalArgumentException("SKU "+sku+" đã được dùng bởi sản phẩm "+p.getName());
+            skuService.checkVariant(sku,v.getId());
             v.setSku(sku);
             v.setPrice(number(row,"price",1000000000));v.setQuantity((long)number(row,"quantity",1000000));v.setActive(row.path("active").asBoolean(true));
             String image=row.path("imageUrl").asText("").trim();
@@ -59,7 +61,7 @@ public class VariantService {
         return v;
     }
     public static long stock(Product p,ProductVariant v){return v==null?p.getQuantity():v.getQuantity();}
-    public static double price(Product p,ProductVariant v){return p.discountedPrice(v==null?p.getPrice():v.getPrice());}
+    public static double price(PromotionPricing.Discounts discounts,Product p,ProductVariant v){return discounts.price(p,v==null?p.getPrice():v.getPrice());}
     public static void check(Product p,ProductVariant v,long quantity){
         if(!p.isActive()||!p.isTechnologyCatalog()||(v==null&&p.hasVariants())||(v!=null&&!v.isActive())||quantity<1||quantity>100||quantity>stock(p,v))throw new IllegalArgumentException("Chọn phiên bản hợp lệ và số lượng trong tồn kho: "+p.getName());
     }

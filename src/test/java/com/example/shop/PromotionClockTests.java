@@ -33,6 +33,7 @@ class PromotionClockTests {
     private static final double PRICE = 1000000;
     private static final double RATE = 10;
 
+    @Autowired com.example.shop.api.service.PromotionPricing pricing;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired BrandRepository brands;
@@ -108,7 +109,7 @@ class PromotionClockTests {
             var promotion = promotion(product, scenario);
 
             double expectedPrice = scenario.effective() ? PRICE * (1 - RATE / 100) : PRICE;
-            assertThat(products.findById(product.getId()).orElseThrow().getDiscountedPrice())
+            assertThat(pricing.snapshot().price(products.findById(product.getId()).orElseThrow(), products.findById(product.getId()).orElseThrow().getPrice()))
                     .as("discounted price for %s", scenario.name()).isEqualTo(expectedPrice);
 
             var offers = json.readTree(mvc.perform(get("/api/v1/offers")).andReturn().getResponse().getContentAsString());

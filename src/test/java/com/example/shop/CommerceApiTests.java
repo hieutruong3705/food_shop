@@ -325,7 +325,7 @@ class CommerceApiTests {
         product.setCategory(laptops);product.setPrice(1000000);products.save(product);
         var extra=new Product();extra.setName("Other line "+UUID.randomUUID());extra.setPrice(otherLinePrice);extra.setQuantity(3);extra=products.save(extra);
         var v=new Voucher();String code="MIN-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);
-        v.setCode(code);v.setDiscount(10);v.setScopeType(ScopeType.CATEGORY);v.setCategories(new ArrayList<>(List.of(laptops)));v.setMinimumOrder(5000000);vouchers.save(v);
+        v.setCode(code);v.setDiscount(10);v.setScopeType(ScopeType.CATALOG);v.setCategories(new ArrayList<>(List.of(laptops)));v.setMinimumOrder(5000000);vouchers.save(v);
         commerce.add(buyer.getEmail(),new AddItem(product.getId(),1));commerce.add(buyer.getEmail(),new AddItem(extra.getId(),1));
         if(applies){
             var quote=commerce.quote(buyer.getEmail(),code,null);

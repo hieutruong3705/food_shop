@@ -11,7 +11,7 @@ import java.util.List;
 @Table(name = "promotions")
 public class Promotion implements Serializable,ScopedOffer {
     @Enumerated(EnumType.STRING) @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
-    @Column(nullable=false,length=20) private ScopeType scopeType=ScopeType.PRODUCT;
+    @Column(nullable=false,length=20) private ScopeType scopeType=ScopeType.CATALOG;
     public ScopeType getScopeType(){return scopeType;}
     public void setScopeType(ScopeType type){scopeType=type;}
     @ManyToMany

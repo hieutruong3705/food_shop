@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.*;
 
 @SpringBootTest @AutoConfigureMockMvc @ActiveProfiles("test") @Transactional
 class ScopeApiTests {
+    @Autowired com.example.shop.api.service.PromotionPricing pricing;
     @Autowired MockMvc mvc;@Autowired ObjectMapper json;@Autowired CategoryRepository categories;@Autowired BrandRepository brands;@Autowired ProductRepository products;@Autowired UserRepository users;@Autowired RoleRepository roles;@Autowired PromotionRepository promotions;@Autowired VoucherRepository vouchers;@Autowired EntityManager em;
     String email;String catalogKey=UUID.randomUUID().toString();Category c1,c2,c3;Brand b1,b2;Product p1,p2,p3;
     @BeforeEach void setup(){
@@ -34,9 +35,9 @@ class ScopeApiTests {
         for(String scope:List.of("ALL","CATEGORY","BRAND","PRODUCT")){
             var n=scope(scope);n.put("name","scope-test");n.put("discountRate",10);n.put("startDate",java.time.Instant.now().minusSeconds(3600).toString());n.put("endDate",java.time.Instant.now().plusSeconds(3600).toString());
             long id=create("promotions",n);em.flush();em.clear();
-            assertThat(products.findById(p1.getId()).orElseThrow().getDiscountedPrice()).isEqualTo(900000);
+            assertThat(pricing.snapshot().price(products.findById(p1.getId()).orElseThrow(), products.findById(p1.getId()).orElseThrow().getPrice())).isEqualTo(900000);
             boolean third=scope.equals("ALL")||scope.equals("BRAND");
-            assertThat(products.findById(p3.getId()).orElseThrow().getDiscountedPrice()).isEqualTo(third?2700000:3000000);
+            assertThat(pricing.snapshot().price(products.findById(p3.getId()).orElseThrow(), products.findById(p3.getId()).orElseThrow().getPrice())).isEqualTo(third?2700000:3000000);
             mvc.perform(get("/api/v1/products").param("promotionId",""+id).param("search",catalogKey)).andExpect(jsonPath("$.totalElements").value(scope.equals("ALL")?3:2));
             var offer=promotions.findById(id).orElseThrow();assertThat(offer.getCategories().isEmpty()).isEqualTo(!scope.equals("CATEGORY"));assertThat(offer.getBrands().isEmpty()).isEqualTo(!scope.equals("BRAND"));assertThat(offer.getProducts().isEmpty()).isEqualTo(!scope.equals("PRODUCT"));
             promotions.delete(offer);em.flush();em.clear();

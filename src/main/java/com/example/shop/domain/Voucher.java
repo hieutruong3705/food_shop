@@ -18,9 +18,9 @@ import jakarta.persistence.Table;
 @Table(name = "vouchers")
 public class Voucher implements Serializable,ScopedOffer {
     @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING) @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
-    @jakarta.persistence.Column(nullable=false,length=20) private ScopeType scopeType=ScopeType.CATEGORY;
+    @jakarta.persistence.Column(nullable=false,length=20) private ScopeType scopeType=ScopeType.CATALOG;
     public ScopeType getScopeType(){return scopeType;}
-    public void setScopeType(ScopeType type){scopeType=type;isAll=type==ScopeType.ALL;}
+    public void setScopeType(ScopeType type){scopeType=type;}
     @ManyToMany
     @JoinTable(name="voucher_brand",joinColumns=@JoinColumn(name="voucher_id"),inverseJoinColumns=@JoinColumn(name="brand_id"))
     private List<Brand> brands=new ArrayList<>();
@@ -37,7 +37,6 @@ public class Voucher implements Serializable,ScopedOffer {
 
     private String code;
     private double discount;
-    private boolean isAll;
     @org.hibernate.annotations.ColumnDefault("true")
     @jakarta.persistence.Column(nullable=false) private boolean active = true;
     private java.util.Date startDate;
@@ -95,13 +94,13 @@ public class Voucher implements Serializable,ScopedOffer {
         this.discount = discount;
     }
 
+    /** Derived from the scope; kept so older API payloads and callers that only know "all products" keep working. */
     public boolean isAll() {
         return scopeType==ScopeType.ALL;
     }
 
-    public void setAll(boolean isAll) {
-        this.isAll = isAll;
-        this.scopeType=isAll?ScopeType.ALL:ScopeType.CATEGORY;
+    public void setAll(boolean all) {
+        this.scopeType=all?ScopeType.ALL:ScopeType.CATALOG;
     }
 
     public List<Category> getCategories() {

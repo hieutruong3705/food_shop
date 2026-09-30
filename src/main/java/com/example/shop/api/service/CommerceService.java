@@ -4,6 +4,7 @@ import com.example.shop.api.dto.CommerceRequests.*;
 import com.example.shop.api.dto.CommerceResponse;
 import com.example.shop.api.dto.CommerceResponse.*;
 import com.example.shop.api.exception.ResourceNotFoundException;
+import com.example.shop.api.service.PromotionPricing.Discounts;
 import com.example.shop.domain.*;
 import com.example.shop.repository.*;
 import org.springframework.stereotype.Service;
@@ -24,9 +25,10 @@ public class CommerceService {
     private final VoucherRepository vouchers;
     private final SandboxPaymentService payments;
     private final Clock clock;
-    public CommerceService(UserRepository users, CartRepository carts, ProductRepository products, OrderRepository orders, VoucherRepository vouchers, SandboxPaymentService payments, Clock clock) {
+    private final PromotionPricing pricing;
+    public CommerceService(UserRepository users, CartRepository carts, ProductRepository products, OrderRepository orders, VoucherRepository vouchers, SandboxPaymentService payments, Clock clock, PromotionPricing pricing) {
         this.users=users; this.carts=carts; this.products=products; this.orders=orders; this.vouchers=vouchers;
-        this.payments=payments; this.clock=clock;
+        this.payments=payments; this.clock=clock; this.pricing=pricing;
     }
     /** Read paths (GET cart, quote, orders) must not queue on the buyer's row lock. */
     private User userForRead(String email) {
@@ -45,23 +47,24 @@ public class CommerceService {
         if(c==null) { c=new Cart(); c.setUser(u); c=carts.save(c); }
         return c;
     }
-    private CartView view(Cart c) {
-        List<CartLine> lines=c.getCartItems().stream().map(i -> new CartLine(i.getId(),i.getProduct().getId(),i.getProduct().getName(),i.getVariant()!=null && i.getVariant().getImageUrl()!=null && !i.getVariant().getImageUrl().isBlank()?i.getVariant().getImageUrl():i.getProduct().getImage(),i.getQuantity(),VariantService.stock(i.getProduct(),i.getVariant()),price(i.getProduct(),i.getVariant()),i.getProduct().isActive() && i.getProduct().isTechnologyCatalog() && (i.getVariant()==null?!i.getProduct().hasVariants():i.getVariant().isActive()),i.getVariant()==null?null:i.getVariant().getId(),i.getVariant()==null?null:i.getVariant().getLabel())).toList();
+    private CartView view(Discounts discounts,Cart c) {
+        List<CartLine> lines=c.getCartItems().stream().map(i -> new CartLine(i.getId(),i.getProduct().getId(),i.getProduct().getName(),i.getVariant()!=null && i.getVariant().getImageUrl()!=null && !i.getVariant().getImageUrl().isBlank()?i.getVariant().getImageUrl():i.getProduct().getImage(),i.getQuantity(),VariantService.stock(i.getProduct(),i.getVariant()),price(discounts,i.getProduct(),i.getVariant()),i.getProduct().isActive() && i.getProduct().isTechnologyCatalog() && (i.getVariant()==null?!i.getProduct().hasVariants():i.getVariant().isActive()),i.getVariant()==null?null:i.getVariant().getId(),i.getVariant()==null?null:i.getVariant().getLabel())).toList();
         return new CartView(lines,lines.stream().mapToLong(CartLine::quantity).sum(),lines.stream().mapToDouble(i -> i.price()*i.quantity()).sum());
     }
     @Transactional(readOnly=true)
     public CartView getCart(String email) {
         Cart c=carts.findByUser(userForRead(email));
-        return c==null?new CartView(List.of(),0,0):view(c);
+        return c==null?new CartView(List.of(),0,0):view(pricing.current(),c);
     }
     /** Display only: checkout validates the voucher and stock again while holding the locks. */
     @Transactional(readOnly=true)
     public Quote quote(String email,String code,List<Long> selectedIds) {
         Cart c=carts.findByUser(userForRead(email));
         if(c==null || c.getCartItems().isEmpty())throw new IllegalArgumentException("Giỏ hàng trống");
+        var discounts=pricing.current();
         Voucher voucher=resolveVoucher(code,false);BigDecimal subtotal=BigDecimal.ZERO,eligible=BigDecimal.ZERO;
         for(var item:selection(c,selectedIds)){
-            var p=item.getProduct();VariantService.check(p,item.getVariant(),item.getQuantity());var amount=BigDecimal.valueOf(price(p,item.getVariant())).multiply(BigDecimal.valueOf(item.getQuantity()));subtotal=subtotal.add(amount);
+            var p=item.getProduct();VariantService.check(p,item.getVariant(),item.getQuantity());var amount=BigDecimal.valueOf(price(discounts,p,item.getVariant())).multiply(BigDecimal.valueOf(item.getQuantity()));subtotal=subtotal.add(amount);
             if(applies(voucher,p))eligible=eligible.add(amount);
         }
         return totals(subtotal,eligible,voucher);
@@ -104,15 +107,15 @@ public class CommerceService {
         long quantity=input.quantity()+(item==null?0:item.getQuantity());
         VariantService.check(p,variant,quantity);
         if(item==null) { item=new CartItem(); item.setCart(c); item.setProduct(p); item.setVariant(variant); c.getCartItems().add(item); }
-        item.setQuantity(quantity); item.setPrice(price(p,variant)); c.setSum(c.getCartItems().size());
-        carts.saveAndFlush(c); return view(c);
+        item.setQuantity(quantity); item.setPrice(price(pricing.current(),p,variant)); c.setSum(c.getCartItems().size());
+        carts.saveAndFlush(c); return view(pricing.current(),c);
     }
     public CartView update(String email,long id,Long quantity) {
         Cart c=cart(userForWrite(email));
         CartItem item=c.getCartItems().stream().filter(i -> i.getId()==id).findFirst().orElseThrow(() -> missing("Mục giỏ hàng",id));
         if(quantity==null) c.getCartItems().remove(item);
         else { VariantService.check(item.getProduct(),item.getVariant(),quantity); item.setQuantity(quantity); }
-        c.setSum(c.getCartItems().size()); carts.saveAndFlush(c); return view(c);
+        c.setSum(c.getCartItems().size()); carts.saveAndFlush(c); return view(pricing.current(),c);
     }
     public OrderView checkout(String email,String key,Checkout input) {
         User u=userForWrite(email);
@@ -134,13 +137,14 @@ public class CommerceService {
         o.setStatus("PENDING"); o.setPaymentMethod(input.paymentMethod()); o.setPaymentStatus("UNPAID");
         List<OrderDetail> lines=new ArrayList<>(); BigDecimal subtotal=BigDecimal.ZERO, eligible=BigDecimal.ZERO;
         Voucher voucher=resolveVoucher(input.voucherCode(),true);
+        var discounts=pricing.current();
         for(CartItem item:selected.stream().sorted(Comparator.comparingLong(i -> i.getProduct().getId())).toList()) {
             entityManager.flush();
             Product p=products.lockById(item.getProduct().getId()).orElseThrow(() -> missing("Sản phẩm",item.getProduct().getId()));
             entityManager.refresh(p, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
             var variant=variants.require(p,item.getVariant()==null?null:item.getVariant().getId());
             VariantService.check(p,variant,item.getQuantity());
-            OrderDetail d=new OrderDetail(); d.setOrder(o); d.setProduct(p); d.setProductName(p.getName()); d.setProductSku(variant==null?p.getSku():variant.getSku()); d.setVariant(variant); d.setVariantLabel(variant==null?null:variant.getLabel()); d.setQuantity(item.getQuantity()); d.setPrice(price(p,variant)); lines.add(d);
+            OrderDetail d=new OrderDetail(); d.setOrder(o); d.setProduct(p); d.setProductName(p.getName()); d.setProductSku(variant==null?p.getSku():variant.getSku()); d.setVariant(variant); d.setVariantLabel(variant==null?null:variant.getLabel()); d.setQuantity(item.getQuantity()); d.setPrice(price(discounts,p,variant)); lines.add(d);
             BigDecimal amount=BigDecimal.valueOf(d.getPrice()).multiply(BigDecimal.valueOf(d.getQuantity())); subtotal=subtotal.add(amount);
             if(applies(voucher,p)) eligible=eligible.add(amount);
             if(variant!=null)variant.setQuantity(variant.getQuantity()-item.getQuantity());
@@ -186,8 +190,8 @@ public class CommerceService {
         if("COMPLETED".equals(next)) { o.setCompletedAt(Date.from(clock.instant())); o.setPaymentStatus("PAID"); }
         o.setStatus(next); return CommerceResponse.order(o);
     }
-    private static double price(Product p,ProductVariant variant) {
-        double value=VariantService.price(p,variant);
+    private static double price(Discounts discounts,Product p,ProductVariant variant) {
+        double value=VariantService.price(discounts,p,variant);
         if(!Double.isFinite(value) || value<0) throw new IllegalArgumentException("Giá sản phẩm không hợp lệ");
         return BigDecimal.valueOf(value).setScale(0,RoundingMode.HALF_UP).doubleValue();
     }

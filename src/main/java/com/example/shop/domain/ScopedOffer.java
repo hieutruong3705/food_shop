@@ -5,12 +5,6 @@ public interface ScopedOffer {
     List<Category> getCategories();void setCategories(List<Category> values);
     List<Brand> getBrands();void setBrands(List<Brand> values);
     List<Product> getProducts();void setProducts(List<Product> values);
-    default boolean appliesTo(Product product){
-        return switch(getScopeType()){
-            case ALL -> true;
-            case CATEGORY -> product.getCategory()!=null&&getCategories().stream().anyMatch(c->c.getId()==product.getCategory().getId());
-            case BRAND -> product.getBrand()!=null&&getBrands().stream().anyMatch(b->b.getId()==product.getBrand().getId());
-            case PRODUCT -> getProducts().stream().anyMatch(p->p.getId()==product.getId());
-        };
-    }
+    default OfferScopeRule.Scope scope(){return OfferScopeRule.Scope.of(this);}
+    default boolean appliesTo(Product product){return scope().matches(product);}
 }
