@@ -31,3 +31,11 @@ build/
 
 ### VS Code ###
 .vscode/
+data/
+.env
+*.log
+frontend/test-results/
+frontend/playwright-report/
+*.exe
+hs_err_pid*.log
+replay_pid*.log
