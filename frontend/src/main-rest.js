@@ -1,0 +1,10 @@
+import { createApp } from "vue";
+import { createPinia } from "pinia";
+import RestApp from "./RestApp.vue";
+import router from "./router/index.js";
+import "./rest.css";
+import "./retail.css";
+import "./catalog.css";
+import "./experience.css";
+import "./admin-layout.css";
+createApp(RestApp).use(createPinia()).use(router).mount("#app");
