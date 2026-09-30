@@ -54,6 +54,13 @@ public class ApiExceptionHandler {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "Máy chủ gặp lỗi. Vui lòng thử lại sau.", Map.of());
     }
 
+    @ExceptionHandler(com.example.shop.api.ratelimit.RateLimitExceededException.class)
+    public ResponseEntity<Map<String,Object>> tooManyRequests(com.example.shop.api.ratelimit.RateLimitExceededException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header("Retry-After", Long.toString(exception.getRetryAfterSeconds()))
+            .body(errorBody(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), Map.of()));
+    }
+
     @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
     public ResponseEntity<Map<String,Object>> serviceStatus(org.springframework.web.server.ResponseStatusException exception) {
         return error(HttpStatus.valueOf(exception.getStatusCode().value()),exception.getReason(),Map.of());
@@ -99,11 +106,15 @@ public class ApiExceptionHandler {
     }
 
     private ResponseEntity<Map<String, Object>> error(HttpStatus status, String message, Map<?, ?> details) {
+        return ResponseEntity.status(status).body(errorBody(status, message, details));
+    }
+
+    private Map<String, Object> errorBody(HttpStatus status, String message, Map<?, ?> details) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", Instant.now().toString());
         body.put("status", status.value());
         body.put("message", message);
         body.put("details", details);
-        return ResponseEntity.status(status).body(body);
+        return body;
     }
 }

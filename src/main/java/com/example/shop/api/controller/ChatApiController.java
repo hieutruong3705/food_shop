@@ -5,28 +5,22 @@ import jakarta.validation.constraints.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
 import com.example.shop.api.service.GeminiChatService;
-import jakarta.servlet.http.HttpSession;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 /** Gemini is called server-side; the existing mock remains available when no key is configured. */
 @RestController
 public class ChatApiController {
     private final GeminiChatService gemini;
     public ChatApiController(GeminiChatService gemini){this.gemini=gemini;}
-    public record Turn(@NotBlank @Pattern(regexp="user|assistant") String role,@NotBlank @Size(max=6000) String text){}
+    /** Longest history sent to Gemini in total; the client drops the oldest turns to stay under it. */
+    static final int MAX_HISTORY_CHARS=4000;
+    public record Turn(@NotBlank @Pattern(regexp="user|assistant") String role,@NotBlank @Size(max=1000,message="Mỗi lượt hội thoại tối đa 1.000 ký tự") String text){}
     public record Message(@NotBlank @Size(max=1000) String message,@Size(max=8) List<@NotNull @Valid Turn> history){}
     @GetMapping({"/api/chat/status","/api/v1/chat/status"}) public Map<String,String> status(){return Map.of("provider",gemini.configured()?"gemini":"mock");}
-    @PostMapping({"/api/chat","/api/v1/chat"}) public Map<String,String> chat(@Valid @RequestBody Message input,HttpSession session){
+    /** The 12 requests a minute per client address are enforced by RateLimitInterceptor. */
+    @PostMapping({"/api/chat","/api/v1/chat"}) public Map<String,String> chat(@Valid @RequestBody Message input){
+        int historyChars=input.history()==null?0:input.history().stream().mapToInt(t->t.text().length()).sum();
+        if(historyChars>MAX_HISTORY_CHARS)throw new IllegalArgumentException("Lịch sử hội thoại quá dài (tối đa 4.000 ký tự). Hãy bắt đầu cuộc trò chuyện mới.");
         if(gemini.configured()){
-            synchronized(session){
-                long now=System.currentTimeMillis();
-                var start=(Long)session.getAttribute("chat.window");
-                int count=Optional.ofNullable((Integer)session.getAttribute("chat.count")).orElse(0);
-                if(start==null||now-start>=60000){session.setAttribute("chat.window",now);count=0;}
-                if(count>=12)throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,"Bạn gửi quá nhanh. Vui lòng chờ một phút rồi thử lại.");
-                session.setAttribute("chat.count",count+1);
-            }
             var history=input.history()==null?List.<Map<String,String>>of():input.history().stream().map(t->Map.of("role",t.role(),"text",t.text())).toList();
             return Map.of("reply",gemini.reply(input.message(),history),"provider","gemini");
         }

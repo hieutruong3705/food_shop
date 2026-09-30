@@ -3,7 +3,6 @@ package com.example.shop.service;
 import com.example.shop.domain.Order;
 import com.example.shop.domain.Role;
 import com.example.shop.domain.User;
-import com.example.shop.domain.dto.RegisterDTO;
 import com.example.shop.repository.OrderRepository;
 import com.example.shop.repository.RoleRepository;
 import com.example.shop.repository.UserRepository;
@@ -18,7 +17,6 @@ import java.io.UnsupportedEncodingException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,22 +53,6 @@ public class UserService {
     // Lưu thông tin người dùng vào cơ sở dữ liệu
     public User handleSaveUser(User user) {
         return userRepository.save(user);
-    }
-
-    // Đăng ký người dùng mới (CẬP NHẬT: Thêm logic tạo mã xác thực và set enabled =
-    // false)
-    public User registerUser(User user) {
-        Role role = roleRepository.findByName("USER");
-        user.setRole(role);
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-
-        // --- THÊM MỚI ---
-        user.setVerificationCode(UUID.randomUUID().toString()); // Tạo mã xác thực
-        user.setVerificationExpiresAt(clock.instant().plusSeconds(86400));
-        user.setEnabled(false); // Mặc định chưa kích hoạt
-        // ----------------
-
-        return this.handleSaveUser(user);
     }
 
     // --- CÁC HÀM MỚI CHO CHỨC NĂNG XÁC THỰC EMAIL ---
@@ -113,8 +95,8 @@ public class UserService {
     }
 
     private VerificationIssue issue(User user, Instant now) {
-        String code = UUID.randomUUID().toString();
-        user.setVerificationCode(code);
+        String code = Tokens.newToken();
+        user.setVerificationCode(Tokens.hash(code));
         user.setVerificationExpiresAt(now.plusSeconds(VERIFICATION_VALID_SECONDS));
         user.setVerificationSentAt(now);
         user = userRepository.save(user);
@@ -151,6 +133,19 @@ public class UserService {
         }
     }
 
+    /** Sends the reset link; a mail failure is logged (without the link) and never reveals whether the address exists. */
+    public boolean sendResetQuietly(String recipientEmail, String link) {
+        try {
+            sendEmail(recipientEmail, link);
+            return true;
+        } catch (Exception e) {
+            Throwable cause = e;
+            while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+            log.warn("Could not send a password reset e-mail: {}: {}", cause.getClass().getSimpleName(), cause.getMessage());
+            return false;
+        }
+    }
+
     // Gửi email xác thực đăng ký
     public void sendVerificationEmail(String toAddress, String fullName, String code, String siteURL)
             throws MessagingException, UnsupportedEncodingException {
@@ -181,7 +176,7 @@ public class UserService {
     // Xử lý khi người dùng bấm link xác thực
     @org.springframework.transaction.annotation.Transactional
     public boolean verify(String verificationCode) {
-        User user = userRepository.lockByVerificationCode(verificationCode);
+        User user = userRepository.lockByVerificationCode(Tokens.hash(verificationCode));
 
         if (user == null || user.isEnabled() || user.getVerificationExpiresAt()==null || user.getVerificationExpiresAt().isBefore(clock.instant())) {
             return false; // Code sai hoặc đã kích hoạt rồi
@@ -195,11 +190,11 @@ public class UserService {
 
     // --- CÁC HÀM MỚI CHO CHỨC NĂNG QUÊN MẬT KHẨU ---
 
-    // 1. Tạo token reset password và lưu vào DB
+    // 1. Lưu SHA-256 của token reset password vào DB; token gốc chỉ được gửi qua email
     public void updateResetPasswordToken(String token, String email) throws Exception {
         User user = userRepository.findByEmail(email);
         if (user != null) {
-            user.setResetPasswordToken(token);
+            user.setResetPasswordToken(Tokens.hash(token));
             user.setResetPasswordExpiresAt(clock.instant().plusSeconds(3600));
             userRepository.save(user);
         } else {
@@ -211,7 +206,7 @@ public class UserService {
     @org.springframework.transaction.annotation.Transactional
     public User getByResetPasswordToken(String token) {
         if(token==null || token.isBlank())return null;
-        User user=userRepository.lockByResetToken(token);
+        User user=userRepository.lockByResetToken(Tokens.hash(token));
         return user!=null && user.getResetPasswordExpiresAt()!=null && user.getResetPasswordExpiresAt().isAfter(clock.instant())?user:null;
     }
 
@@ -314,15 +309,6 @@ public class UserService {
     // Lấy thông tin quyền hạn theo tên role
     public Role getRoleByName(String name) {
         return this.roleRepository.findByName(name);
-    }
-
-    // Chuyển đổi dữ liệu từ RegisterDTO sang thực thể User
-    public User registerDTOtoUser(RegisterDTO registerDTO) {
-        User user = new User();
-        user.setFullName(registerDTO.getFirstName() + " " + registerDTO.getLastName());
-        user.setEmail(registerDTO.getEmail());
-        user.setPassword(registerDTO.getPassword());
-        return user;
     }
 
     // Kiểm tra xem email đã tồn tại trong hệ thống chưa

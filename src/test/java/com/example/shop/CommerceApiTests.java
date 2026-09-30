@@ -3,6 +3,8 @@ package com.example.shop;
 import com.example.shop.domain.*;
 import com.example.shop.repository.*;
 import com.example.shop.api.service.CommerceService;
+import com.example.shop.service.Tokens;
+import com.example.shop.support.MailLinks;
 import com.example.shop.api.dto.CommerceRequests.*;
 import com.fasterxml.jackson.databind.*;
 import org.junit.jupiter.api.*;
@@ -195,9 +197,20 @@ class CommerceApiTests {
         String email=UUID.randomUUID()+"@test.local";
         mvc.perform(post("/api/v1/auth/register").with(csrf()).contentType("application/json").content(body(Map.of("firstName","Test","lastName","User","email",email,"password",password,"confirmPassword",password)))).andExpect(status().isCreated());
         var u=users.findByEmail(email);assertThat(u.isEnabled()).isFalse();assertThat(u.getPassword()).isNotEqualTo(password);
-        mvc.perform(post("/api/v1/auth/verify").with(csrf()).contentType("application/json").content(json.writeValueAsString(Map.of("code",u.getVerificationCode())))).andExpect(jsonPath("$.verified").value(true));
+        // Only the SHA-256 of the mailed code is stored, so the stored value cannot be replayed.
+        String code=MailLinks.lastParameter(mail,"code");
+        assertThat(u.getVerificationCode()).isEqualTo(Tokens.hash(code)).isNotEqualTo(code);
+        mvc.perform(post("/api/v1/auth/verify").with(csrf()).contentType("application/json").content(json.writeValueAsString(Map.of("code",u.getVerificationCode())))).andExpect(jsonPath("$.verified").value(false));
+        mvc.perform(post("/api/v1/auth/verify").with(csrf()).contentType("application/json").content(json.writeValueAsString(Map.of("code",code)))).andExpect(jsonPath("$.verified").value(true));
         mvc.perform(post("/api/v1/auth/forgot-password").with(csrf()).contentType("application/json").content(body(Map.of("email",email)))).andExpect(status().isOk());
-        u=users.findByEmail(email);String token=u.getResetPasswordToken();
+        u=users.findByEmail(email);String token=MailLinks.lastParameter(mail,"token");
+        assertThat(u.getResetPasswordToken()).isEqualTo(Tokens.hash(token)).isNotEqualTo(token);
+        var stored=Map.of("token",u.getResetPasswordToken(),"password","New-password-2026","confirmPassword","New-password-2026");
+        mvc.perform(post("/api/v1/auth/reset-password").with(csrf()).contentType("application/json").content(body(stored))).andExpect(status().isNotFound());
+        // A token that was stored in plain text before hashing was introduced no longer works.
+        var legacy=users.findByEmail(email);legacy.setResetPasswordToken("legacy-plain-token");users.save(legacy);
+        mvc.perform(post("/api/v1/auth/reset-password").with(csrf()).contentType("application/json").content(body(Map.of("token","legacy-plain-token","password","New-password-2026","confirmPassword","New-password-2026")))).andExpect(status().isNotFound());
+        legacy.setResetPasswordToken(Tokens.hash(token));users.save(legacy);
         var reset=Map.of("token",token,"password","New-password-2026","confirmPassword","New-password-2026");
         mvc.perform(post("/api/v1/auth/reset-password").with(csrf()).contentType("application/json").content(body(reset))).andExpect(status().isOk());
         mvc.perform(post("/api/v1/auth/reset-password").with(csrf()).contentType("application/json").content(body(reset))).andExpect(status().isNotFound());

@@ -19,6 +19,20 @@ Gọi `GET /auth/csrf`, giữ cookie và đọc `{headerName,token}`. Gửi toke
 | GET, PUT | /account | fullName,phone,address |
 | POST | /account/password | currentPassword,password; kết thúc phiên hiện tại |
 
+## Giới hạn tần suất và token email
+
+Giới hạn theo địa chỉ IP (`request.getRemoteAddr()`), đếm trong bộ nhớ từng instance, cửa sổ trượt. Vượt giới hạn trả `429` với `{timestamp,status,message,details}` như mọi lỗi API cùng header `Retry-After` (giây):
+
+| Endpoint (POST) | Giới hạn |
+|---|---|
+| `/api/chat`, `/api/v1/chat` (một bộ đếm chung) | 12 lượt/phút |
+| `/auth/login` | 10 lượt/phút; ngoài ra mỗi email sai mật khẩu 5 lần liên tiếp thì khóa 5 phút (kể cả email không có tài khoản, và cả khi nhập đúng mật khẩu trong thời gian khóa). Lỗi cũ hơn 15 phút không cộng dồn; đăng nhập thành công xóa bộ đếm |
+| `/auth/register`, `/auth/forgot-password`, `/auth/resend-verification` | 5 lượt/10 phút, đếm riêng cho từng endpoint |
+
+Tắt bằng `RATE_LIMIT_ENABLED=false` (profile `test` và `e2e` đã tắt vì bộ kiểm thử đăng nhập rất dày từ một địa chỉ). **Reverse proxy:** `X-Forwarded-For` không bao giờ được tin trực tiếp. Sau proxy, mọi khách sẽ trông như cùng một IP (địa chỉ của proxy) và dùng chung giới hạn, nên hãy đặt `server.forward-headers-strategy=native` cùng `server.tomcat.remoteip.internal-proxies=<địa chỉ proxy>` để Tomcat chỉ tin header từ proxy đó.
+
+Mã xác minh email và token đặt lại mật khẩu là 256 bit ngẫu nhiên gửi qua email; database chỉ lưu SHA-256 (hex 64 ký tự) của chúng. Migration V9 xóa token đặt lại mật khẩu cũ và thay mã xác minh cũ của các tài khoản đang chờ bằng giá trị ngẫu nhiên: **mọi liên kết xác minh và đặt lại mật khẩu đã gửi trước khi triển khai bản này ngừng hoạt động**; người dùng bấm "Gửi lại email xác minh" hoặc "Quên mật khẩu" để nhận liên kết mới.
+
 ## Mua hàng
 
 `GET /catalog/menu?categoryId=...` trả facets cùng `bestSellers: [{product,units}]` và `rankingSource: sales|newest`. Tổng bán từ order_details của đơn CONFIRMED/SHIPPING/COMPLETED, COD hoặc PAID, giới hạn 10 trong query repository. `GET /offers` trả promotion/voucher đủ điều kiện công khai; `GET /products?promotionId=...` lọc sản phẩm áp dụng (kết hợp với category/brand/stock/spec/price).

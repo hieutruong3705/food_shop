@@ -1,14 +1,17 @@
 package com.example.shop.api.controller;
 
 import java.util.Map;
-import java.util.UUID;
 
 import com.example.shop.api.dto.auth.LoginRequest;
 import com.example.shop.api.dto.auth.RegisterRequest;
 import com.example.shop.api.dto.auth.ResetPasswordRequest;
 import com.example.shop.api.dto.auth.UserResponse;
 import com.example.shop.api.exception.ResourceNotFoundException;
+import com.example.shop.api.ratelimit.LoginAttempts;
+import com.example.shop.api.ratelimit.RateLimitExceededException;
+import com.example.shop.api.ratelimit.RateLimitInterceptor;
 import com.example.shop.domain.User;
+import com.example.shop.service.Tokens;
 import com.example.shop.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -41,12 +44,16 @@ public class AuthApiController {
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
-    public AuthApiController(UserService userService, PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager) {
+    private final LoginAttempts loginAttempts;
+
+    public AuthApiController(UserService userService, PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager, LoginAttempts loginAttempts) {
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
+        this.loginAttempts = loginAttempts;
     }
 
+    static final String RESET_REQUESTED = "Nếu email tồn tại, hướng dẫn đã được gửi.";
     static final String REGISTERED = "Đăng ký thành công. Vui lòng kiểm tra email để xác minh. Nếu không nhận được email, hãy yêu cầu gửi lại.";
     /** Identical for every outcome so the response never reveals whether an e-mail address is registered. */
     static final String VERIFICATION_RESENT = "Nếu tài khoản đang chờ xác minh, chúng tôi đã gửi lại email xác minh. Nếu không nhận được email, hãy thử lại sau ít phút.";
@@ -72,8 +79,19 @@ public class AuthApiController {
     @PostMapping("/login")
     public UserResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest,
             HttpServletResponse servletResponse) {
-        Authentication authentication = authenticationManager.authenticate(
-                UsernamePasswordAuthenticationToken.unauthenticated(request.email(), request.password()));
+        long locked = loginAttempts.lockedSeconds(request.email());
+        if (locked > 0) {
+            throw new RateLimitExceededException("Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau " + RateLimitInterceptor.describe(locked) + ".", locked);
+        }
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    UsernamePasswordAuthenticationToken.unauthenticated(request.email(), request.password()));
+        } catch (org.springframework.security.core.AuthenticationException e) {
+            loginAttempts.failed(request.email());
+            throw e;
+        }
+        loginAttempts.succeeded(request.email());
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
@@ -111,11 +129,11 @@ public class AuthApiController {
     public Map<String, String> forgotPassword(@RequestBody Map<String, String> body, HttpServletRequest servletRequest) throws Exception {
         String email = body.get("email");
         if (email == null || email.isBlank()) throw new IllegalArgumentException("Email là bắt buộc");
-        String token = UUID.randomUUID().toString();
-        if (!userService.checkEmailExists(email)) return Map.of("message", "Nếu email tồn tại, hướng dẫn đã được gửi.");
+        if (!userService.checkEmailExists(email)) return Map.of("message", RESET_REQUESTED);
+        String token = Tokens.newToken();
         userService.updateResetPasswordToken(token, email);
-        userService.sendEmail(email, clientBaseUrl(servletRequest) + "/reset-password?token=" + token);
-        return Map.of("message", "Nếu email tồn tại, hướng dẫn đã được gửi.");
+        userService.sendResetQuietly(email, clientBaseUrl(servletRequest) + "/reset-password?token=" + token);
+        return Map.of("message", RESET_REQUESTED);
     }
 
     @PostMapping("/reset-password")

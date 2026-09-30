@@ -6,9 +6,19 @@ const messages=ref([{role:'bot',text:'Xin chào 👋 Tôi là trợ lý TechShop
 const suggestions=['Tư vấn laptop','Tư vấn điện thoại','So sánh sản phẩm','Sản phẩm dưới 20 triệu'];
 async function scroll(){await nextTick();log.value?.scrollTo({top:log.value.scrollHeight,behavior:'smooth'});}
 async function show(){open.value=true;await nextTick();input.value?.focus();scroll();api('/api/chat/status').then(result=>provider.value=result.provider).catch(()=>{});}
+// The server rejects a turn over 1,000 characters or a history over 4,000 in total, so send the newest turns that fit.
+const MAX_TURN=1000,MAX_HISTORY=4000,MAX_TURNS=8;
+function recentHistory(){
+  const turns=messages.value.slice(1).filter(item=>!item.failed).slice(-MAX_TURNS).map(item=>({role:item.role==='bot'?'assistant':'user',text:item.text.slice(0,MAX_TURN)}));
+  let total=0,keep=0;
+  for(let i=turns.length-1;i>=0;i--){total+=turns[i].text.length;if(total>MAX_HISTORY)break;keep++;}
+  const kept=turns.slice(turns.length-keep);
+  while(kept.length&&kept[0].role==='assistant')kept.shift();
+  return kept;
+}
 async function send(text=message.value){
   if(busy.value||!text.trim())return;
-  const value=text.trim(),history=messages.value.slice(1).filter(item=>!item.failed).slice(-8).map(item=>({role:item.role==='bot'?'assistant':'user',text:item.text.slice(0,6000)}));
+  const value=text.trim(),history=recentHistory();
   message.value='';error.value='';const turn={role:'user',text:value};messages.value.push(turn);busy.value=true;scroll();
   try{const result=await api('/api/chat',{method:'POST',body:JSON.stringify({message:value,history})});provider.value=result.provider||provider.value;messages.value.push({role:'bot',text:result.reply});}
   catch(e){turn.failed=true;error.value=e.message;message.value=value;}

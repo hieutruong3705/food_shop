@@ -4,6 +4,8 @@ import com.example.shop.domain.Role;
 import com.example.shop.domain.User;
 import com.example.shop.repository.RoleRepository;
 import com.example.shop.repository.UserRepository;
+import com.example.shop.service.Tokens;
+import com.example.shop.support.MailLinks;
 import com.example.shop.support.MovableClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.mail.Session;
@@ -94,17 +96,19 @@ class AuthVerificationTests {
         assertThat(registerStatus(email, "First", PASSWORD)).isEqualTo(201);
         var user = users.findByEmail(email);
         assertThat(user.isEnabled()).isFalse();
-        String firstCode = user.getVerificationCode();
-        assertThat(firstCode).isNotBlank();
-        assertThat(output.getOut()).contains("Could not send the verification e-mail").doesNotContain(firstCode);
+        String firstCode = MailLinks.lastParameter(mail, "code");
+        assertThat(user.getVerificationCode()).isEqualTo(Tokens.hash(firstCode));
+        assertThat(output.getOut()).contains("Could not send the verification e-mail")
+                .doesNotContain(firstCode).doesNotContain(user.getVerificationCode());
         assertThat(user.getVerificationSentAt()).as("a failed send must not consume the resend slot").isNull();
 
         // The mail server is back: the user asks again right away and can verify with the new link.
         doNothing().when(mail).send(any(MimeMessage.class));
         resend(email);
         verify(mail, times(2)).send(any(MimeMessage.class));
-        String secondCode = users.findByEmail(email).getVerificationCode();
+        String secondCode = MailLinks.lastParameter(mail, "code");
         assertThat(secondCode).isNotEqualTo(firstCode);
+        assertThat(users.findByEmail(email).getVerificationCode()).isEqualTo(Tokens.hash(secondCode));
         mvc.perform(post("/api/v1/auth/verify").with(csrf()).contentType("application/json")
                 .content(json.writeValueAsString(Map.of("code", secondCode))))
                 .andExpect(jsonPath("$.verified").value(true));
@@ -152,7 +156,7 @@ class AuthVerificationTests {
     void anExpiredUnverifiedRegistrationCanBeRegisteredAgain() throws Exception {
         String email = newEmail();
         assertThat(registerStatus(email, "Old", PASSWORD)).isEqualTo(201);
-        String oldCode = users.findByEmail(email).getVerificationCode();
+        String oldCode = MailLinks.lastParameter(mail, "code");
 
         // Still inside the 24 hours: the address is taken.
         clock.advance(Duration.ofHours(23));
@@ -163,13 +167,15 @@ class AuthVerificationTests {
         assertThat(registerStatus(email, "New", "Another-password-2026")).isEqualTo(201);
         var renewed = users.findByEmail(email);
         assertThat(renewed.getFullName()).isEqualTo("New User");
-        assertThat(renewed.getVerificationCode()).isNotEqualTo(oldCode);
+        String renewedCode = MailLinks.lastParameter(mail, "code");
+        assertThat(renewedCode).isNotEqualTo(oldCode);
+        assertThat(renewed.getVerificationCode()).isEqualTo(Tokens.hash(renewedCode));
         assertThat(renewed.getVerificationExpiresAt()).isAfter(clock.instant());
         assertThat(renewed.isEnabled()).isFalse();
         mvc.perform(post("/api/v1/auth/verify").with(csrf()).contentType("application/json")
                 .content(json.writeValueAsString(Map.of("code", oldCode)))).andExpect(jsonPath("$.verified").value(false));
         mvc.perform(post("/api/v1/auth/verify").with(csrf()).contentType("application/json")
-                .content(json.writeValueAsString(Map.of("code", renewed.getVerificationCode())))).andExpect(jsonPath("$.verified").value(true));
+                .content(json.writeValueAsString(Map.of("code", renewedCode)))).andExpect(jsonPath("$.verified").value(true));
         // The renewed password is the one that works.
         mvc.perform(post("/api/v1/auth/login").with(csrf()).contentType("application/json")
                 .content(json.writeValueAsString(Map.of("email", email, "password", PASSWORD)))).andExpect(status().isUnauthorized());

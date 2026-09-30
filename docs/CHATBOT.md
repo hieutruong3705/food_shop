@@ -3,10 +3,10 @@
 Đã kiểm chứng ngày 30/09/2026: Google chấp nhận khóa local (HTTP 200); gọi thật qua `/api/chat` trả `provider=gemini` và tư vấn laptop thành công. Log `data/gemini-smoke.log` không chứa khóa. Build/package đạt; 10 kiểm thử Java đạt (`data/gemini-tests.log`); hai bài browser chat và banner/ưu đãi đạt (`data/gemini-e2e.log`). Backend JAR đang dùng MySQL techshop tại port 8080 (`data/gemini-server.log`).
 
 - Frontend gọi `POST /api/chat` hoặc `/api/v1/chat`; backend gọi Google qua HTTPS `generateContent`, header `x-goog-api-key`. Không có API key trong Vue, response, URL hoặc bundle.
-- Request cũ `{ "message": "Tư vấn laptop" }` vẫn hoạt động. Có thể thêm `history: [{"role":"user|assistant","text":"..."}]`, tối đa 8 tin, mỗi tin 6.000 ký tự; message mới tối đa 1.000 ký tự. Không chấp nhận role system.
+- Request cũ `{ "message": "Tư vấn laptop" }` vẫn hoạt động. Có thể thêm `history: [{"role":"user|assistant","text":"..."}]`, tối đa 8 tin, mỗi tin 1.000 ký tự và tổng lịch sử tối đa 4.000 ký tự (vượt thì trả 400 bằng tiếng Việt; `TechChat.vue` tự bỏ các lượt cũ nhất để vừa giới hạn); message mới tối đa 1.000 ký tự. Không chấp nhận role system.
 - Response `{ "reply": "...", "provider": "gemini|mock" }`. `GET /api/chat/status` (alias `/api/v1/chat/status`) chỉ trả provider được cấu hình, không kiểm tra khả năng xác thực và không trả khóa.
 - Không cấu hình khóa hoặc `CHAT_ENABLED=false`: dùng mock cũ. Đã cấu hình Gemini nhưng kết nối lỗi: trả lỗi rõ ràng, không ngầm trả mock. UI giữ câu hỏi để thử lại, không gửi lượt thất bại vào lịch sử.
-- Timeout kết nối 5 giây, đọc 30 giây; tối đa 3 request đồng thời trong một JVM và 12 lượt/phút/HTTP session. Khi triển khai nhiều instance/public lớn cần rate limit tại gateway; giới hạn session không phải chống lạm dụng theo danh tính.
+- Timeout kết nối 5 giây, đọc 30 giây; tối đa 3 request đồng thời trong một JVM và 12 lượt/phút mỗi địa chỉ IP (`RateLimitInterceptor`, cả `/api/chat` lẫn `/api/v1/chat` dùng chung một bộ đếm; vượt thì trả 429 kèm `Retry-After`). Bộ đếm nằm trong bộ nhớ của từng instance; khi chạy nhiều instance hoặc public lớn vẫn nên có rate limit ở gateway. Xem mục "Giới hạn tần suất" trong `docs/API.md` về địa chỉ IP sau reverse proxy.
 - Chat chưa truy vấn kho/đơn hàng: Gemini tư vấn kiến thức thiết bị, không được khẳng định giá/tồn kho/mã giảm giá thực tế. Không gửi tài khoản hoặc đơn hàng sang Google. Nội dung câu hỏi và tối đa 8 tin trước đó được gửi sang Google khi dùng Gemini.
 
 ## Cấu hình
