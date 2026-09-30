@@ -19,19 +19,19 @@ import javax.crypto.spec.SecretKeySpec;
 public class SandboxPaymentService {
     @org.springframework.beans.factory.annotation.Autowired private VariantService variants;
     private final OrderRepository orders; private final ProductRepository products;
-    private final boolean enabled; private final String merchant,secret,clientUrl;
+    private final boolean enabled; private final String merchant,secret,clientUrl; private final Clock clock;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entities;
     public SandboxPaymentService(OrderRepository orders,ProductRepository products,
         @Value("${shop.vnpay.enabled:false}") boolean enabled,@Value("${shop.vnpay.tmn-code:}") String merchant,
-        @Value("${shop.vnpay.secret:}") String secret,@Value("${shop.client-url:http://localhost:5173}") String clientUrl) {
-        this.orders=orders;this.products=products;this.enabled=enabled;this.merchant=merchant;this.secret=secret;this.clientUrl=clientUrl;
+        @Value("${shop.vnpay.secret:}") String secret,@Value("${shop.client-url:http://localhost:5173}") String clientUrl,Clock clock) {
+        this.orders=orders;this.products=products;this.enabled=enabled;this.merchant=merchant;this.secret=secret;this.clientUrl=clientUrl;this.clock=clock;
     }
     public boolean available(){return enabled && !merchant.isBlank() && !secret.isBlank();}
     public String paymentUrl(Order order,String ip){
         if(!available())throw new IllegalArgumentException("VNPay sandbox chưa được cấu hình");
         if(!"VNPAY".equals(order.getPaymentMethod()) || !"UNPAID".equals(order.getPaymentStatus()) || !"PENDING".equals(order.getStatus()))throw new IllegalArgumentException("Đơn hàng không thể thanh toán trực tuyến");
         Instant expires=order.getCreatedAt().toInstant().plusSeconds(900);
-        if(expires.isBefore(Instant.now()))throw new IllegalArgumentException("Phiên thanh toán đã hết hạn");
+        if(expires.isBefore(clock.instant()))throw new IllegalArgumentException("Phiên thanh toán đã hết hạn");
         var format=DateTimeFormatter.ofPattern("yyyyMMddHHmmss").withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
         var params=new TreeMap<String,String>();
         params.put("vnp_Version","2.1.0");params.put("vnp_Command","pay");params.put("vnp_TmnCode",merchant);
@@ -63,7 +63,7 @@ public class SandboxPaymentService {
     }
     private static boolean isClosedWithoutPayment(Order o){return "CANCELLED".equals(o.getStatus()) && Set.of("UNPAID","EXPIRED","FAILED").contains(o.getPaymentStatus());}
     private static String reference(Map<String,String> params){String value=params.get("vnp_TransactionNo");return value==null?null:value.substring(0,Math.min(value.length(),64));}
-    @Transactional public void expire(long id){var optional=orders.lockById(id);if(optional.isEmpty())return;var o=optional.get();if("VNPAY".equals(o.getPaymentMethod()) && "PENDING".equals(o.getStatus()) && "UNPAID".equals(o.getPaymentStatus()) && o.getCreatedAt().toInstant().plusSeconds(1200).isBefore(Instant.now())){o.setPaymentStatus("EXPIRED");release(o);}}
+    @Transactional public void expire(long id){var optional=orders.lockById(id);if(optional.isEmpty())return;var o=optional.get();if("VNPAY".equals(o.getPaymentMethod()) && "PENDING".equals(o.getStatus()) && "UNPAID".equals(o.getPaymentStatus()) && o.getCreatedAt().toInstant().plusSeconds(1200).isBefore(clock.instant())){o.setPaymentStatus("EXPIRED");release(o);}}
     private void release(Order order){
         for(var d:order.getOrderDetails().stream().sorted(Comparator.comparingLong(i->i.getProduct().getId())).toList()){
             variants.restore(d);

@@ -1,5 +1,18 @@
 # TechShop — trạng thái chuyển đổi
 
+## Cập nhật 2026-09-30 — nguồn thời gian khuyến mãi (P2, kiến trúc H5)
+
+**Tái hiện (trước khi sửa).** Dùng MySQL 8.0.44 tạm ở cổng riêng với `default-time-zone='+00:00'` (đúng mặc định của `mysql:8.0` trong Docker), Flyway V1–V7, JDBC `serverTimezone=Asia/Ho_Chi_Minh`, chạy `PromotionClockTests` với JVM UTC và với JVM `Asia/Ho_Chi_Minh`. Cả hai tổ hợp đều lỗi cùng một chỗ: khuyến mãi bắt đầu 1 phút trước (giờ VN) không có giá sale (`discountedPrice` 1.000.000 thay vì 900.000), trong khi `/api/v1/offers` và bộ lọc `promotionId` (dùng giờ JVM) coi khuyến mãi đang chạy. Nguyên nhân: giá sale là `@Formula` so `start_date`/`end_date` (giờ VN đã lưu) với `current_timestamp` của phiên MySQL (UTC), lệch 7 giờ; khuyến mãi đã kết thúc 3 giờ trước vẫn bị coi là còn hiệu lực. Với MySQL `+07:00` hoặc H2 thì không lỗi, nên máy local không thấy.
+
+**Đã sửa.**
+- `config/TimeConfig`: bean `java.time.Clock` (múi giờ `Asia/Ho_Chi_Minh`) dùng cho `/offers`, voucher, bộ lọc `promotionId`, hết hạn thanh toán, đơn hoàn tất và ngày mặc định của dashboard.
+- Với URL `jdbc:mysql:`/`jdbc:mariadb:`, ứng dụng tự đặt `hibernate.jdbc.time_zone=Asia/Ho_Chi_Minh` (ghi và đọc mốc thời gian theo giờ VN, không phụ thuộc múi giờ JVM) và chạy `SET time_zone = '+07:00'` cho mọi kết nối (`current_timestamp` cũng là giờ VN, không phụ thuộc cấu hình máy chủ). Không đụng H2 nên test và E2E giữ nguyên.
+- `compose.yaml`: `TZ=Asia/Ho_Chi_Minh` cho cả hai service và `--default-time-zone=+07:00` cho MySQL.
+
+**Sau khi sửa.** `PromotionClockTests` đạt trên MySQL `+00:00` với JVM UTC và JVM giờ VN, và trên H2; 47 test (Commerce, Admin, Payment, Scope, Experience, RestArchitecture, PromotionClock, PaymentExpiryJob) đạt trên MySQL `+00:00` với JVM UTC. `FixedClockTests` cố định Clock ở 23:59 và 00:01 giờ VN quanh mốc 00:00 để kiểm tra banner ưu đãi, voucher và bộ lọc `promotionId`.
+
+**Còn lại.** Giá sale vẫn do `@Formula` tính bằng giờ của database (đã cố định bằng `SET time_zone`); nó chưa dùng `Clock`. P7 thay `@Formula` bằng `PromotionPricing` tính trong Java để giá, banner và voucher dùng cùng một `Clock`. Dữ liệu cũ không cần chuyển đổi: khi tái hiện, mốc bắt đầu luôn được lưu theo giờ VN dù JVM chạy UTC hay giờ VN, vì JDBC URL mặc định có `serverTimezone=Asia/Ho_Chi_Minh`. Nếu môi trường nào dùng JDBC URL không có tham số này, hãy đối chiếu vài khuyến mãi/voucher đang chạy sau khi triển khai.
+
 ## Cập nhật 2026-09-30 — gán hãng và phạm vi ưu đãi
 
 Theo yêu cầu mới, Category–Brand được quản lý rõ bằng bảng `category_brands` và form chọn nhiều hãng. V6 backfill từ Product, thêm scope ALL/CATEGORY/BRAND/PRODUCT cho cả Promotion/Voucher; giữ giá trị ưu đãi cũ bằng chuyển đổi/tách phạm vi tương đương. Bộ lọc bỏ Phiên bản/Kết nối, dùng bảo hành dạng thanh kéo theo tháng. Xem [CATEGORY-BRAND-SCOPES.md](CATEGORY-BRAND-SCOPES.md) cho file, migration, API, quy tắc và test. Mục bên dưới ghi lại kiến trúc trước yêu cầu mới này.

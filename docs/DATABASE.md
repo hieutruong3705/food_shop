@@ -16,6 +16,10 @@ node scripts/hide-test-fixtures.mjs --apply
 
 Script chỉ ẩn sản phẩm khớp chính xác mẫu test đã biết và tự lưu snapshot JSON; không xóa đơn hàng hay dữ liệu kinh doanh. Không có thao tác dọn MySQL tự động trong E2E.
 
+## Múi giờ MySQL
+
+Ngày giờ (khuyến mãi, voucher, đơn hàng) lưu theo giờ Việt Nam. Ứng dụng tự đặt `hibernate.jdbc.time_zone=Asia/Ho_Chi_Minh` và `SET time_zone = '+07:00'` cho mọi kết nối MySQL/MariaDB, nên kết quả không phụ thuộc múi giờ của JVM hay container. MySQL production vẫn nên chạy với `default-time-zone='+07:00'` (mục `command` của service `mysql` trong `compose.yaml` đã đặt sẵn, cùng `TZ=Asia/Ho_Chi_Minh`) để các công cụ khác như báo cáo SQL thấy cùng một giờ. Nếu ghi đè `spring.datasource.hikari.connection-init-sql`, hãy giữ lệnh đặt múi giờ. Xem kết quả tái hiện lỗi lệch 7 giờ trong `docs/MIGRATION.md`.
+
 ## Local hiện tại — MySQL techshop (29/09/2026)
 
 Ứng dụng đã chuyển từ H2 sang MySQL80 tại `127.0.0.1:3306/techshop`. Profile `dev,mysql-local` dùng MySQL Connector, Flyway V1–V5 và `ddl-auto=validate`; vẫn dùng email local và tài khoản demo. Script `run-backend.ps1` mặc định chọn MySQL.

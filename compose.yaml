@@ -1,7 +1,10 @@
 services:
   mysql:
     image: mysql:8.0
+    # Promotion windows are stored and compared as Vietnam wall-clock time.
+    command: ["--default-time-zone=+07:00"]
     environment:
+      TZ: Asia/Ho_Chi_Minh
       MYSQL_DATABASE: techshop
       MYSQL_USER: techshop
       MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
@@ -18,6 +21,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      TZ: Asia/Ho_Chi_Minh
       SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/techshop?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Ho_Chi_Minh
       SPRING_DATASOURCE_USERNAME: techshop

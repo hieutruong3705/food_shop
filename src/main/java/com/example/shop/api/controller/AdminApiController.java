@@ -14,10 +14,10 @@ import java.util.*;
 
 @RestController @RequestMapping("/api/v1/admin") @Transactional
 public class AdminApiController {
-    private final AdminCatalogService catalog;private final CommerceService commerce;private final OrderRepository orders;private final ProductRepository products;private final UserRepository users;private final InvoiceService invoices;
-    public AdminApiController(AdminCatalogService c,CommerceService co,OrderRepository o,ProductRepository p,UserRepository u,InvoiceService i){catalog=c;commerce=co;orders=o;products=p;users=u;invoices=i;}
+    private final AdminCatalogService catalog;private final CommerceService commerce;private final OrderRepository orders;private final ProductRepository products;private final UserRepository users;private final InvoiceService invoices;private final java.time.Clock clock;
+    public AdminApiController(AdminCatalogService c,CommerceService co,OrderRepository o,ProductRepository p,UserRepository u,InvoiceService i,java.time.Clock clock){catalog=c;commerce=co;orders=o;products=p;users=u;invoices=i;this.clock=clock;}
     @GetMapping("/dashboard") public Map<String,Object> dashboard(@RequestParam(required=false) java.time.LocalDate startDate,@RequestParam(required=false) java.time.LocalDate endDate){
-        var end=endDate==null?java.time.LocalDate.now():endDate;var start=startDate==null?end.minusDays(29):startDate;if(start.isAfter(end)||java.time.temporal.ChronoUnit.DAYS.between(start,end)>366)throw new IllegalArgumentException("Chọn khoảng ngày tối đa 367 ngày");
+        var end=endDate==null?java.time.LocalDate.now(clock):endDate;var start=startDate==null?end.minusDays(29):startDate;if(start.isAfter(end)||java.time.temporal.ChronoUnit.DAYS.between(start,end)>366)throw new IllegalArgumentException("Chọn khoảng ngày tối đa 367 ngày");
         var zone=java.time.ZoneId.of("Asia/Ho_Chi_Minh");var rows=orders.findByCreatedAtBetween(Date.from(start.atStartOfDay(zone).toInstant()),Date.from(end.plusDays(1).atStartOfDay(zone).toInstant().minusMillis(1)));
         var chart=new TreeMap<String,Double>();for(var day=start;!day.isAfter(end);day=day.plusDays(1))chart.put(day.toString(),0d);
         for(var order:rows)if("COMPLETED".equals(order.getStatus()))chart.merge(order.getCreatedAt().toInstant().atZone(zone).toLocalDate().toString(),order.getTotalPrice(),Double::sum);

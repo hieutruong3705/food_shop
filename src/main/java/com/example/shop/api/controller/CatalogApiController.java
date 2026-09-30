@@ -24,9 +24,10 @@ public class CatalogApiController {
     private final BannerService bannerService;
     private final com.example.shop.repository.ProductRepository products;
     private final com.example.shop.repository.BrandRepository brands;
-    public CatalogApiController(ProductService productService, CategoryService categoryService, BannerService bannerService, com.example.shop.repository.ProductRepository products, com.example.shop.repository.BrandRepository brands) {
+    private final java.time.Clock clock;
+    public CatalogApiController(ProductService productService, CategoryService categoryService, BannerService bannerService, com.example.shop.repository.ProductRepository products, com.example.shop.repository.BrandRepository brands, java.time.Clock clock) {
         this.productService = productService; this.categoryService = categoryService; this.bannerService = bannerService;
-        this.products=products; this.brands=brands;
+        this.products=products; this.brands=brands; this.clock=clock;
     }
     @GetMapping("/products")
     public org.springframework.data.domain.Page<ProductSummaryResponse> products(@RequestParam(defaultValue="") String search,
@@ -65,7 +66,7 @@ public class CatalogApiController {
             if(maxWarranty!=null)filters.add(cb.le(root.get("warrantyMonths"),maxWarranty));
             if(promotionId!=null) {
                 var sub=q.subquery(Long.class);var offer=sub.from(com.example.shop.domain.Promotion.class);
-                var offerProducts=offer.join("products",jakarta.persistence.criteria.JoinType.LEFT);var offerBrands=offer.join("brands",jakarta.persistence.criteria.JoinType.LEFT);var offerCategories=offer.join("categories",jakarta.persistence.criteria.JoinType.LEFT);var now=new java.util.Date();
+                var offerProducts=offer.join("products",jakarta.persistence.criteria.JoinType.LEFT);var offerBrands=offer.join("brands",jakarta.persistence.criteria.JoinType.LEFT);var offerCategories=offer.join("categories",jakarta.persistence.criteria.JoinType.LEFT);var now=java.util.Date.from(clock.instant());
                 sub.select(offer.get("id")).where(cb.equal(offer.get("id"),promotionId),cb.isTrue(offer.get("active")),
                     cb.lessThan(offer.get("startDate"),now),cb.greaterThan(offer.get("endDate"),now),
                     cb.or(cb.equal(offer.get("scopeType"),com.example.shop.domain.ScopeType.ALL),

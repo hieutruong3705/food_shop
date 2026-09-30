@@ -9,6 +9,7 @@ import com.example.shop.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.*;
+import java.time.Clock;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -22,9 +23,10 @@ public class CommerceService {
     private final OrderRepository orders;
     private final VoucherRepository vouchers;
     private final SandboxPaymentService payments;
-    public CommerceService(UserRepository users, CartRepository carts, ProductRepository products, OrderRepository orders, VoucherRepository vouchers, SandboxPaymentService payments) {
+    private final Clock clock;
+    public CommerceService(UserRepository users, CartRepository carts, ProductRepository products, OrderRepository orders, VoucherRepository vouchers, SandboxPaymentService payments, Clock clock) {
         this.users=users; this.carts=carts; this.products=products; this.orders=orders; this.vouchers=vouchers;
-        this.payments=payments;
+        this.payments=payments; this.clock=clock;
     }
     private User user(String email) {
         User u=users.lockByEmail(email);
@@ -63,7 +65,7 @@ public class CommerceService {
         if(v==null)throw new IllegalArgumentException("Voucher không hợp lệ");
         entityManager.refresh(v, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if(!v.isActive() || !Double.isFinite(v.getDiscount()) || v.getDiscount()<=0 || v.getDiscount()>100)throw new IllegalArgumentException("Voucher không hợp lệ hoặc đã ngừng hoạt động");
-        Date now=new Date();
+        Date now=Date.from(clock.instant());
         if(v.getStartDate()!=null && now.before(v.getStartDate()))throw new IllegalArgumentException("Voucher chưa đến thời gian sử dụng");
         if(v.getEndDate()!=null && !now.before(v.getEndDate()))throw new IllegalArgumentException("Voucher đã hết hạn");
         if(v.getUsageLimit()!=null && v.getUsedCount()>=v.getUsageLimit())throw new IllegalArgumentException("Voucher đã hết lượt sử dụng");
@@ -161,7 +163,7 @@ public class CommerceService {
                 variants.restore(d);
             }
         }
-        if("COMPLETED".equals(next)) { o.setCompletedAt(new Date()); o.setPaymentStatus("PAID"); }
+        if("COMPLETED".equals(next)) { o.setCompletedAt(Date.from(clock.instant())); o.setPaymentStatus("PAID"); }
         o.setStatus(next); return CommerceResponse.order(o);
     }
     private static double price(Product p,ProductVariant variant) {

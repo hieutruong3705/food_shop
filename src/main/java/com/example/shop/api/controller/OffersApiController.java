@@ -5,18 +5,19 @@ import com.example.shop.domain.*;
 import com.example.shop.api.service.AdminCatalogService;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Clock;
 import java.util.*;
 
 @RestController @RequestMapping("/api/v1") @Transactional(readOnly=true)
 public class OffersApiController {
-    private final PromotionRepository promotions; private final VoucherRepository vouchers; private final ProductRepository products;
-    public OffersApiController(PromotionRepository p,VoucherRepository v,ProductRepository products){promotions=p;vouchers=v;this.products=products;}
+    private final PromotionRepository promotions; private final VoucherRepository vouchers; private final ProductRepository products; private final Clock clock;
+    public OffersApiController(PromotionRepository p,VoucherRepository v,ProductRepository products,Clock clock){promotions=p;vouchers=v;this.products=products;this.clock=clock;}
     private List<String> scopeNames(ScopedOffer offer){return switch(offer.getScopeType()){
         case ALL -> List.of();case CATEGORY -> offer.getCategories().stream().map(Category::getName).toList();
         case BRAND -> offer.getBrands().stream().map(Brand::getName).toList();case PRODUCT -> offer.getProducts().stream().map(Product::getName).toList();
     };}
     @GetMapping("/offers") public Map<String,Object> offers(){
-        var now=new Date();
+        var now=Date.from(clock.instant());
         var activePromotions=promotions.findAll().stream().filter(p -> p.isActive()&&p.getStartDate()!=null&&p.getEndDate()!=null&&p.getStartDate().before(now)&&p.getEndDate().after(now)&&p.getDiscountRate()>0&&p.getDiscountRate()<=100)
             .filter(p -> p.getScopeType()==ScopeType.ALL||!scopeNames(p).isEmpty())
             .sorted(Comparator.comparingDouble(Promotion::getDiscountRate).reversed().thenComparing(Comparator.comparingLong(Promotion::getId).reversed()))
