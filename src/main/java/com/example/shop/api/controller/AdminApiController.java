@@ -15,6 +15,7 @@ import java.util.*;
 @RestController @RequestMapping("/api/v1/admin") @Transactional
 public class AdminApiController {
     @org.springframework.beans.factory.annotation.Autowired private OfferScopeService offerScopes;
+    @org.springframework.beans.factory.annotation.Autowired private AdminInputReader inputs;
     private final AdminCatalogService catalog;private final CommerceService commerce;private final OrderRepository orders;private final ProductRepository products;private final UserRepository users;private final InvoiceService invoices;private final java.time.Clock clock;
     public AdminApiController(AdminCatalogService c,CommerceService co,OrderRepository o,ProductRepository p,UserRepository u,InvoiceService i,java.time.Clock clock){catalog=c;commerce=co;orders=o;products=p;users=u;invoices=i;this.clock=clock;}
     @GetMapping("/dashboard") public Map<String,Object> dashboard(@RequestParam(required=false) java.time.LocalDate startDate,@RequestParam(required=false) java.time.LocalDate endDate){
@@ -36,7 +37,8 @@ public class AdminApiController {
     @GetMapping("/options/{resource}") public Page<Map<String,Object>> options(@PathVariable String resource,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="") String search,@RequestParam(required=false) Long categoryId,@RequestParam(defaultValue="") List<Long> categoryIds,@RequestParam(defaultValue="") List<Long> ids){return catalog.options(resource,page,search,categoryId,categoryIds,ids);}
     @PostMapping("/offers/preview") public Map<String,Object> preview(@RequestParam String kind,@RequestBody JsonNode body){
         if(!Set.of("voucher","promotion").contains(kind))throw new IllegalArgumentException("Loại ưu đãi không hợp lệ");
-        return offerScopes.preview(body,kind.equals("voucher"));
+        try{return offerScopes.preview(inputs.scope(body),kind.equals("voucher"));}
+        catch(IllegalArgumentException e){return Map.of("valid",false,"message",e.getMessage(),"total",0,"inStock",0,"sample",List.of());}
     }
     @PatchMapping("/products/{id}/status") public Map<String,Object> selling(@PathVariable long id,@RequestBody JsonNode body){
         if(!body.path("active").isBoolean())throw new IllegalArgumentException("Trạng thái active phải là true hoặc false");

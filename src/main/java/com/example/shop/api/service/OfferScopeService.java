@@ -10,7 +10,7 @@ import com.example.shop.repository.BrandRepository;
 import com.example.shop.repository.CategoryRepository;
 import com.example.shop.repository.OfferScopeSpecification;
 import com.example.shop.repository.ProductRepository;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.example.shop.api.dto.admin.ScopeInput;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -60,7 +60,7 @@ public class OfferScopeService {
     }
 
     /** Validates the scope in the payload and stores it on the offer, replacing its previous scope. */
-    public void apply(ScopedOffer offer, JsonNode payload, boolean voucher) {
+    public void apply(ScopedOffer offer, ScopeInput payload, boolean voucher) {
         Resolved scope = resolve(payload, voucher);
         offer.setScopeType(scope.type());
         offer.setCategories(new ArrayList<>(scope.categories()));
@@ -74,7 +74,7 @@ public class OfferScopeService {
      * form can show the reason while the admin is still choosing.
      */
     @Transactional(readOnly = true)
-    public Map<String, Object> preview(JsonNode payload, boolean voucher) {
+    public Map<String, Object> preview(ScopeInput payload, boolean voucher) {
         var result = new LinkedHashMap<String, Object>();
         Resolved resolved;
         try {
@@ -112,15 +112,15 @@ public class OfferScopeService {
         return result;
     }
 
-    private Resolved resolve(JsonNode n, boolean voucher) {
-        String declared = n.path("scopeType").asText("").trim();
-        List<Long> categoryIds = ids(n, "categoryIds");
-        List<Long> brandIds = ids(n, "brandIds");
-        List<Long> productIds = ids(n, "productIds");
+    private Resolved resolve(ScopeInput n, boolean voucher) {
+        String declared = n.scopeType() == null ? "" : n.scopeType().trim();
+        List<Long> categoryIds = ids(n.categoryIds());
+        List<Long> brandIds = ids(n.brandIds());
+        List<Long> productIds = ids(n.productIds());
         ScopeType type;
         if (declared.isEmpty()) {
             boolean catalog = !categoryIds.isEmpty() || !brandIds.isEmpty();
-            if (voucher && n.path("all").asBoolean()) type = ScopeType.ALL;
+            if (voucher && Boolean.TRUE.equals(n.all())) type = ScopeType.ALL;
             else if (catalog && !productIds.isEmpty()) throw new IllegalArgumentException("Chọn một phạm vi áp dụng");
             else if (catalog) type = ScopeType.CATALOG;
             else if (!productIds.isEmpty()) type = ScopeType.PRODUCT;
@@ -157,14 +157,10 @@ public class OfferScopeService {
         return new Resolved(type, cs, bs, ps);
     }
 
-    private static List<Long> ids(JsonNode n, String field) {
-        var result = new ArrayList<Long>();
-        if (n.hasNonNull(field) && !n.path(field).isArray()) throw new IllegalArgumentException("Danh sách ID không hợp lệ");
-        for (JsonNode value : n.path(field)) {
-            if (!value.isIntegralNumber() || !value.canConvertToLong() || value.asLong() < 1) throw new IllegalArgumentException("ID không hợp lệ");
-            result.add(value.asLong());
-        }
-        if (result.size() > MAX_ITEMS) throw new IllegalArgumentException("Mỗi danh sách tối đa " + MAX_ITEMS + " mục");
-        return result;
+    private static List<Long> ids(List<Long> values) {
+        if (values == null) return List.of();
+        if (values.size() > MAX_ITEMS) throw new IllegalArgumentException("Mỗi danh sách tối đa " + MAX_ITEMS + " mục");
+        if (values.stream().anyMatch(value -> value == null || value < 1)) throw new IllegalArgumentException("ID không hợp lệ");
+        return values;
     }
 }

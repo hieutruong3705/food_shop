@@ -28,3 +28,5 @@ P0–P8 là các phần đang thực hiện. Kết quả kiểm thử và commit
 - Đổi scope giữ payload CATEGORY/BRAND cũ và suy luận khi thiếu scopeType. ALL xóa các danh sách phụ; CATALOG không được rỗng; hãng phải được gán trong danh mục đã chọn. Danh sách hãng hiển thị theo danh mục; chip của hãng không còn phù hợp được giữ để admin thấy lỗi và chủ động bỏ chọn.
 
 Test nhanh: mở quản trị Voucher hoặc Khuyến mãi, chọn từng thẻ phạm vi; chọn Laptop và một hãng được gán, kiểm tra số xem trước, lưu rồi mở lại. Chuyển ALL để kiểm tra các chip cũ được xóa. Với PRODUCT, tìm SKU và kiểm tra ảnh/giá/tồn kho. Trên cửa hàng, lọc theo chương trình và dùng voucher ở giỏ để đối chiếu. Thử xóa danh mục/hãng đang dùng, nhập SKU trùng hoa/thường, và chọn kỳ dashboard có đơn hoàn thành khác ngày tạo.
+
+P8.1 hoàn tất: record DTO/Bean Validation cho product, category, brand, banner, voucher, promotion, user và dữ liệu lồng; OfferScopeService nhận ScopeInput. H2 93 test (1 bỏ qua) và frontend build đạt. Bộ chuyển tiếp router giữ nguyên payload cũ, sẽ được bỏ khi tách controller ở P8.2.

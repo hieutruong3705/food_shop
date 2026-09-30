@@ -14,6 +14,7 @@ import java.util.*;
 public class AdminCatalogService {
     @org.springframework.beans.factory.annotation.Autowired private VariantService variantService;
     @org.springframework.beans.factory.annotation.Autowired private OfferScopeService offerScopes;
+    @org.springframework.beans.factory.annotation.Autowired private AdminInputReader inputs;
     @org.springframework.beans.factory.annotation.Autowired private PromotionPricing pricing;
     @org.springframework.beans.factory.annotation.Autowired private SkuService skuService;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
@@ -44,6 +45,7 @@ public class AdminCatalogService {
     }
     public Map<String,Object> product(Product p) { return map("id",p.getId(),"name",p.getName(),"sku",p.getSku(),"slug",p.getSlug(),"price",p.getPrice(),"quantity",p.getQuantity(),"active",p.isActive(),"technologyCatalog",p.isTechnologyCatalog(),"shortDesc",p.getShortDesc(),"detailDesc",p.getDetailDesc(),"warrantyMonths",p.getWarrantyMonths(),"categoryId",p.getCategory()==null?null:p.getCategory().getId(),"brandId",p.getBrand()==null?null:p.getBrand().getId(),"images",p.getImages().stream().map(ProductImage::getImageUrl).toList(),"variants",p.getVariants().stream().map(v -> com.example.shop.api.dto.catalog.VariantResponse.from(v,pricing.current())).toList(),"specs",p.getSpecs().stream().map(s -> map("name",s.getSpecName(),"value",s.getSpecValue())).toList()); }
     public Map<String,Object> save(String type,Long id,JsonNode n,String currentEmail) {
+        inputs.validate(type,n);
         long saved=switch(type) {
             case "products" -> {
                 Product p=id==null?new Product():products.lockById(id).orElseThrow(() -> missing(type,id));
@@ -86,12 +88,12 @@ public class AdminCatalogService {
                 if(n.has("minimumOrder"))v.setMinimumOrder(integer(n,"minimumOrder",0,100000000000L));
                 if(n.has("maximumDiscount"))v.setMaximumDiscount(n.path("maximumDiscount").isNull()?null:(double)integer(n,"maximumDiscount",1,100000000000L));
                 if(n.has("usageLimit"))v.setUsageLimit(n.path("usageLimit").isNull()?null:integer(n,"usageLimit",1,1000000000));
-                v.setCode(code);v.setDiscount(number(n,"discount",1,100));offerScopes.apply(v,n,true);yield vouchers.save(v).getId();
+                v.setCode(code);v.setDiscount(number(n,"discount",1,100));offerScopes.apply(v,inputs.scope(n),true);yield vouchers.save(v).getId();
             }
             case "promotions" -> {
                 var p=id==null?new Promotion():promotions.findById(id).orElseThrow(() -> missing(type,id));p.setName(text(n,"name",100));p.setDescription(optional(n,"description",2000));p.setDiscountRate(number(n,"discountRate",1,100));
                 p.setStartDate(date(n,"startDate"));p.setEndDate(date(n,"endDate"));if(!p.getEndDate().after(p.getStartDate()))throw new IllegalArgumentException("Ngày kết thúc phải sau ngày bắt đầu");
-                p.setActive(n.path("active").asBoolean(true));offerScopes.apply(p,n,false);yield promotions.save(p).getId();
+                p.setActive(n.path("active").asBoolean(true));offerScopes.apply(p,inputs.scope(n),false);yield promotions.save(p).getId();
             }
             case "users" -> {
                 if(id==null)throw new IllegalArgumentException("Người dùng tạo tài khoản qua đăng ký");

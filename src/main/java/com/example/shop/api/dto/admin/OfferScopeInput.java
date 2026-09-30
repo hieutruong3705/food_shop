@@ -1,0 +1,14 @@
+package com.example.shop.api.dto.admin;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+import java.util.List;
+import java.util.Map;
+
+public record OfferScopeInput(
+        String scopeType,
+        @Size(max = 500) List<@NotNull @Positive Long> categoryIds,
+        @Size(max = 500) List<@NotNull @Positive Long> brandIds,
+        @Size(max = 500) List<@NotNull @Positive Long> productIds,
+        Boolean all) implements ScopeInput {
+}
