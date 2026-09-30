@@ -6,6 +6,8 @@ import com.example.shop.api.service.CommerceService;
 import com.example.shop.api.dto.CommerceRequests.*;
 import com.fasterxml.jackson.databind.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -93,6 +95,7 @@ class CommerceApiTests {
     @Autowired MockMvc mvc; @Autowired ObjectMapper json; @Autowired UserRepository users; @Autowired RoleRepository roles;
     @Autowired ProductRepository products; @Autowired OrderRepository orders; @Autowired VoucherRepository vouchers;
     @Autowired PasswordEncoder encoder; @Autowired CommerceService commerce; @Autowired PlatformTransactionManager transactions;
+    @Autowired CartRepository carts; @Autowired CategoryRepository categories;
     @MockitoBean JavaMailSender mail;
     User buyer,other,admin; Product product;
     final String password="Test-password-2026";
@@ -269,5 +272,72 @@ class CommerceApiTests {
         mvc.perform(post("/api/v1/auth/logout").session(session).with(csrf())).andExpect(status().isNoContent());
         assertThat(session.isInvalid()).isTrue();
         mvc.perform(get("/api/v1/auth/me")).andExpect(status().isUnauthorized());
+    }
+
+    // --- Read paths take no row locks (M1) ---
+    @Test void cartQuoteAndOrderReadsDoNotWaitForRowLocksHeldByWriters()throws Exception{
+        add(buyer,1);
+        var v=new Voucher();String code="READ-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);v.setCode(code);v.setDiscount(10);v.setAll(true);vouchers.save(v);
+        var locked=new CountDownLatch(1);var release=new CountDownLatch(1);
+        var holder=Executors.newSingleThreadExecutor();var readers=Executors.newFixedThreadPool(4);
+        try{
+            // A writer (as checkout would) holds FOR UPDATE locks on the buyer and on the voucher.
+            holder.submit(()->new TransactionTemplate(transactions).execute(status->{
+                users.lockByEmail(buyer.getEmail());vouchers.lockByCode(code);locked.countDown();
+                try{release.await(30,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}
+                return null;
+            }));
+            assertThat(locked.await(10,TimeUnit.SECONDS)).isTrue();
+            var reads=List.of(
+                readers.submit(()->commerce.getCart(buyer.getEmail())),
+                readers.submit(()->commerce.quote(buyer.getEmail(),code,null)),
+                readers.submit(()->commerce.quote(buyer.getEmail(),code,null)),
+                readers.submit(()->commerce.list(buyer.getEmail())));
+            // The lock timeout of the test database is 10 s, so a read that queues on a lock fails here.
+            for(var read:reads)read.get(5,TimeUnit.SECONDS);
+        }finally{release.countDown();holder.shutdownNow();readers.shutdownNow();}
+    }
+    @Test void emptyCartReadDoesNotCreateACartRow(){
+        var fresh=createUser("USER");
+        assertThat(commerce.getCart(fresh.getEmail()).items()).isEmpty();
+        assertThat(carts.findByUser(fresh)).isNull();
+        assertThatThrownBy(()->commerce.quote(fresh.getEmail(),"",null)).hasMessageContaining("Giỏ hàng trống");
+    }
+
+    // --- Money rules as they behave today. They wait for the project owner's decision (docs/API.md, "Quy tắc tiền"). ---
+    @ParameterizedTest(name="minimumOrder counts the whole selected subtotal: other line {0} -> voucher applies={1}")
+    @CsvSource({"3999999,false","4000000,true","4500000,true"})
+    void voucherMinimumOrderIsComparedWithTheWholeSelectedSubtotalNotTheEligibleLines(long otherLinePrice,boolean applies){
+        var laptops=new Category();laptops.setName("Laptop "+UUID.randomUUID());laptops=categories.save(laptops);
+        product.setCategory(laptops);product.setPrice(1000000);products.save(product);
+        var extra=new Product();extra.setName("Other line "+UUID.randomUUID());extra.setPrice(otherLinePrice);extra.setQuantity(3);extra=products.save(extra);
+        var v=new Voucher();String code="MIN-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);
+        v.setCode(code);v.setDiscount(10);v.setScopeType(ScopeType.CATEGORY);v.setCategories(new ArrayList<>(List.of(laptops)));v.setMinimumOrder(5000000);vouchers.save(v);
+        commerce.add(buyer.getEmail(),new AddItem(product.getId(),1));commerce.add(buyer.getEmail(),new AddItem(extra.getId(),1));
+        if(applies){
+            var quote=commerce.quote(buyer.getEmail(),code,null);
+            // 10 % of the eligible laptop line only (1,000,000), while the 5,000,000 minimum was met by the other line.
+            assertThat(quote.discountAmount()).isEqualTo(100000);assertThat(quote.subtotal()).isEqualTo(1000000+otherLinePrice);
+        }else assertThatThrownBy(()->commerce.quote(buyer.getEmail(),code,null)).hasMessageContaining("tối thiểu");
+    }
+    @ParameterizedTest(name="shipping is free from 1,000,000 before voucher: price {0}, voucher {1}% -> shipping {2}, total {3}")
+    @CsvSource({"500000,0,30000,530000","999999,0,30000,1029999","1000000,0,0,1000000","1050000,10,0,945000","900000,10,30000,840000"})
+    void freeShippingThresholdUsesTheSubtotalBeforeVoucherDiscount(long price,double percent,double shipping,double total)throws Exception{
+        product.setPrice(price);products.save(product);add(buyer,1);
+        String code="";
+        if(percent>0){var v=new Voucher();code="SHIP-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);v.setCode(code);v.setDiscount(percent);v.setAll(true);vouchers.save(v);}
+        var quote=commerce.quote(buyer.getEmail(),code,null);
+        assertThat(quote.shippingFee()).isEqualTo(shipping);assertThat(quote.totalPrice()).isEqualTo(total);
+    }
+    @Test void voucherUsageIsNotReturnedWhenTheOrderIsCancelled(){
+        var v=new Voucher();String code="ONCE-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);
+        v.setCode(code);v.setDiscount(10);v.setAll(true);v.setUsageLimit(1L);v=vouchers.save(v);
+        commerce.add(buyer.getEmail(),new AddItem(product.getId(),1));
+        var order=commerce.checkout(buyer.getEmail(),UUID.randomUUID().toString(),input(code));
+        assertThat(vouchers.findById(v.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
+        commerce.status(buyer.getEmail(),order.id(),"CANCELLED",false);
+        assertThat(vouchers.findById(v.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
+        commerce.add(other.getEmail(),new AddItem(product.getId(),1));
+        assertThatThrownBy(()->commerce.checkout(other.getEmail(),UUID.randomUUID().toString(),input(code))).hasMessageContaining("hết lượt");
     }
 }

@@ -67,6 +67,18 @@ Nếu có `cartItemIds`, chỉ mua các dòng được chọn và giữ các dò
 
 Phân trang sản phẩm mặc định 12, tối đa 60. `sort`: newest, popular, price-asc, price-desc. Bộ lọc/sắp xếp giá dùng giá niêm yết; giá sau khuyến mãi có trong response. Page trả `content,totalElements,totalPages,number,first,last`.
 
+## Quy tắc tiền (chờ xác nhận)
+
+Ba quy tắc dưới đây là hành vi hiện tại của `CommerceService`, được ghi lại bằng test tham số hóa trong `CommerceApiTests` (tên test nêu đúng quy tắc). Chưa có quyết định của chủ dự án nên **chưa đổi code**; nếu đổi quy tắc, sửa test tương ứng trước.
+
+| # | Quy tắc hiện tại | Ví dụ | Trạng thái |
+| --- | --- | --- | --- |
+| 1 | Đơn tối thiểu của voucher so với **tổng toàn bộ các dòng được chọn**, không phải tổng các dòng đủ điều kiện. Mức giảm chỉ tính trên các dòng đủ điều kiện. | Voucher Laptop 10%, tối thiểu 5.000.000₫. Giỏ gồm laptop 1.000.000₫ và một món khác 4.000.000₫ vẫn được áp dụng, giảm 100.000₫. Món khác 3.999.999₫ thì bị từ chối | Chờ xác nhận |
+| 2 | Miễn phí vận chuyển khi **tổng trước khi trừ voucher** từ 1.000.000₫; ngược lại phí 30.000₫. | Đơn 1.050.000₫ trừ voucher 10% còn 945.000₫ vẫn miễn phí ship. Đơn 999.999₫ trả 30.000₫ | Chờ xác nhận |
+| 3 | Lượt dùng voucher (`usedCount`) **không giảm** khi đơn bị hủy hoặc thanh toán thất bại. | Voucher giới hạn 1 lượt: khách A đặt rồi hủy, khách B vẫn bị báo hết lượt | Chờ xác nhận |
+
+Đọc giỏ hàng, báo giá và danh sách/chi tiết đơn (`GET /cart`, `GET /cart/quote`, `GET /orders`, `GET /orders/{id}`) chạy `readOnly` và không dùng `SELECT ... FOR UPDATE`; `GET /cart` không tạo giỏ hàng mới. Báo giá chỉ để hiển thị: checkout khóa lại người mua, voucher và sản phẩm rồi kiểm tra từ đầu. `POST /cart/items`, `PATCH/DELETE /cart/items/{id}`, `POST /orders` và đổi trạng thái đơn vẫn khóa như trước.
+
 ## Quản trị — ADMIN bắt buộc
 
 `GET /products/{id}` trả thêm `hasVariants` và `variants` đang bán: `id,sku,options,label,price,discountedPrice,quantity,active,imageUrl`. Cart và dòng đơn có `variantId,variantLabel`; dòng đơn giữ snapshot, không đổi theo chỉnh sửa sau đó.

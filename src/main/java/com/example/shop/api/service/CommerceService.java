@@ -28,8 +28,15 @@ public class CommerceService {
         this.users=users; this.carts=carts; this.products=products; this.orders=orders; this.vouchers=vouchers;
         this.payments=payments; this.clock=clock;
     }
-    private User user(String email) {
-        User u=users.lockByEmail(email);
+    /** Read paths (GET cart, quote, orders) must not queue on the buyer's row lock. */
+    private User userForRead(String email) {
+        return available(users.findByEmail(email));
+    }
+    /** Write paths serialize per buyer with a row lock. */
+    private User userForWrite(String email) {
+        return available(users.lockByEmail(email));
+    }
+    private static User available(User u) {
         if(u==null || !u.isEnabled() || u.getIsLocked()) throw new org.springframework.security.access.AccessDeniedException("Account unavailable");
         return u;
     }
@@ -42,10 +49,17 @@ public class CommerceService {
         List<CartLine> lines=c.getCartItems().stream().map(i -> new CartLine(i.getId(),i.getProduct().getId(),i.getProduct().getName(),i.getVariant()!=null && i.getVariant().getImageUrl()!=null && !i.getVariant().getImageUrl().isBlank()?i.getVariant().getImageUrl():i.getProduct().getImage(),i.getQuantity(),VariantService.stock(i.getProduct(),i.getVariant()),price(i.getProduct(),i.getVariant()),i.getProduct().isActive() && i.getProduct().isTechnologyCatalog() && (i.getVariant()==null?!i.getProduct().hasVariants():i.getVariant().isActive()),i.getVariant()==null?null:i.getVariant().getId(),i.getVariant()==null?null:i.getVariant().getLabel())).toList();
         return new CartView(lines,lines.stream().mapToLong(CartLine::quantity).sum(),lines.stream().mapToDouble(i -> i.price()*i.quantity()).sum());
     }
-    public CartView getCart(String email) { return view(cart(user(email))); }
+    @Transactional(readOnly=true)
+    public CartView getCart(String email) {
+        Cart c=carts.findByUser(userForRead(email));
+        return c==null?new CartView(List.of(),0,0):view(c);
+    }
+    /** Display only: checkout validates the voucher and stock again while holding the locks. */
+    @Transactional(readOnly=true)
     public Quote quote(String email,String code,List<Long> selectedIds) {
-        Cart c=cart(user(email));if(c.getCartItems().isEmpty())throw new IllegalArgumentException("Giỏ hàng trống");
-        Voucher voucher=resolveVoucher(code);BigDecimal subtotal=BigDecimal.ZERO,eligible=BigDecimal.ZERO;
+        Cart c=carts.findByUser(userForRead(email));
+        if(c==null || c.getCartItems().isEmpty())throw new IllegalArgumentException("Giỏ hàng trống");
+        Voucher voucher=resolveVoucher(code,false);BigDecimal subtotal=BigDecimal.ZERO,eligible=BigDecimal.ZERO;
         for(var item:selection(c,selectedIds)){
             var p=item.getProduct();VariantService.check(p,item.getVariant(),item.getQuantity());var amount=BigDecimal.valueOf(price(p,item.getVariant())).multiply(BigDecimal.valueOf(item.getQuantity()));subtotal=subtotal.add(amount);
             if(applies(voucher,p))eligible=eligible.add(amount);
@@ -58,12 +72,13 @@ public class CommerceService {
         var selected=cart.getCartItems().stream().filter(i->selectedIds.contains(i.getId())).toList();
         if(selected.size()!=selectedIds.size())throw new IllegalArgumentException("Sản phẩm được chọn không còn trong giỏ hàng");return selected;
     }
-    private Voucher resolveVoucher(String code){
+    private Voucher resolveVoucher(String code,boolean lock){
         if(code==null || code.isBlank())return null;
         if(code.length()>50)throw new IllegalArgumentException("Voucher không hợp lệ");
-        Voucher v=vouchers.lockByCode(code.trim().toUpperCase(Locale.ROOT));
+        String normalized=code.trim().toUpperCase(Locale.ROOT);
+        Voucher v=lock?vouchers.lockByCode(normalized):vouchers.findByCode(normalized);
         if(v==null)throw new IllegalArgumentException("Voucher không hợp lệ");
-        entityManager.refresh(v, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        if(lock)entityManager.refresh(v, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if(!v.isActive() || !Double.isFinite(v.getDiscount()) || v.getDiscount()<=0 || v.getDiscount()>100)throw new IllegalArgumentException("Voucher không hợp lệ hoặc đã ngừng hoạt động");
         Date now=Date.from(clock.instant());
         if(v.getStartDate()!=null && now.before(v.getStartDate()))throw new IllegalArgumentException("Voucher chưa đến thời gian sử dụng");
@@ -81,7 +96,7 @@ public class CommerceService {
         return new Quote(subtotal.doubleValue(),shipping,discount.doubleValue(),subtotal.subtract(discount).add(BigDecimal.valueOf(shipping)).doubleValue(),voucher==null?"":voucher.getCode());
     }
     public CartView add(String email, AddItem input) {
-        Cart c=cart(user(email));
+        Cart c=cart(userForWrite(email));
         Product p=products.lockById(input.productId()).orElseThrow(() -> missing("Sản phẩm",input.productId()));
         entityManager.refresh(p,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         var variant=variants.require(p,input.variantId());
@@ -93,14 +108,14 @@ public class CommerceService {
         carts.saveAndFlush(c); return view(c);
     }
     public CartView update(String email,long id,Long quantity) {
-        Cart c=cart(user(email));
+        Cart c=cart(userForWrite(email));
         CartItem item=c.getCartItems().stream().filter(i -> i.getId()==id).findFirst().orElseThrow(() -> missing("Mục giỏ hàng",id));
         if(quantity==null) c.getCartItems().remove(item);
         else { VariantService.check(item.getProduct(),item.getVariant(),quantity); item.setQuantity(quantity); }
         c.setSum(c.getCartItems().size()); carts.saveAndFlush(c); return view(c);
     }
     public OrderView checkout(String email,String key,Checkout input) {
-        User u=user(email);
+        User u=userForWrite(email);
         if(key==null || !key.matches("[A-Za-z0-9-]{16,80}")) throw new IllegalArgumentException("Thiếu mã yêu cầu đặt hàng hợp lệ");
         String scopedKey=u.getId()+":"+key;
         String fingerprint=UUID.nameUUIDFromBytes(input.toString().getBytes(StandardCharsets.UTF_8)).toString();
@@ -118,7 +133,7 @@ public class CommerceService {
         o.setNote(input.note()==null?null:input.note().trim());
         o.setStatus("PENDING"); o.setPaymentMethod(input.paymentMethod()); o.setPaymentStatus("UNPAID");
         List<OrderDetail> lines=new ArrayList<>(); BigDecimal subtotal=BigDecimal.ZERO, eligible=BigDecimal.ZERO;
-        Voucher voucher=resolveVoucher(input.voucherCode());
+        Voucher voucher=resolveVoucher(input.voucherCode(),true);
         for(CartItem item:selected.stream().sorted(Comparator.comparingLong(i -> i.getProduct().getId())).toList()) {
             entityManager.flush();
             Product p=products.lockById(item.getProduct().getId()).orElseThrow(() -> missing("Sản phẩm",item.getProduct().getId()));
@@ -138,13 +153,18 @@ public class CommerceService {
         orders.saveAndFlush(o); c.getCartItems().removeAll(selected); c.setSum(c.getCartItems().size()); carts.save(c);
         return CommerceResponse.order(o);
     }
-    public List<OrderView> list(String email) { return orders.findByUserOrderByIdDesc(user(email)).stream().map(CommerceResponse::order).toList(); }
-    public Order requireOrder(String email,long id,boolean admin) {
-        User u=user(email); Order o=orders.lockById(id).orElseThrow(() -> missing("Đơn hàng",id));
+    @Transactional(readOnly=true)
+    public List<OrderView> list(String email) { return orders.findByUserOrderByIdDesc(userForRead(email)).stream().map(CommerceResponse::order).toList(); }
+    /** Loads the order with its row lock, for callers that change it. */
+    public Order requireOrder(String email,long id,boolean admin) { return findOrder(email,id,admin,true); }
+    private Order findOrder(String email,long id,boolean admin,boolean lock) {
+        User u=lock?userForWrite(email):userForRead(email);
+        Order o=(lock?orders.lockById(id):orders.findById(id)).orElseThrow(() -> missing("Đơn hàng",id));
         if(!admin && o.getUser().getId()!=u.getId()) throw missing("Đơn hàng",id);
         return o;
     }
-    public OrderView detail(String email,long id,boolean admin) { return CommerceResponse.order(requireOrder(email,id,admin)); }
+    @Transactional(readOnly=true)
+    public OrderView detail(String email,long id,boolean admin) { return CommerceResponse.order(findOrder(email,id,admin,false)); }
     public OrderView archive(String email,long id,boolean archived){
         var order=requireOrder(email,id,true);
         if(!Set.of("COMPLETED","CANCELLED").contains(order.getStatus()))throw new IllegalArgumentException("Chỉ lưu trữ đơn đã kết thúc");
