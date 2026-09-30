@@ -29,7 +29,8 @@ class ScopeApiTests {
     Brand brand(){var b=new Brand();b.setName(UUID.randomUUID().toString());return brands.save(b);}
     Category category(Brand b){var c=new Category();c.setName(UUID.randomUUID().toString());c.setBrands(new ArrayList<>(List.of(b)));return categories.save(c);}
     Product product(Category c,Brand b,double price,int warranty){var p=new Product();p.setName(catalogKey+UUID.randomUUID());p.setCategory(c);p.setBrand(b);p.setPrice(price);p.setQuantity(10);p.setWarrantyMonths(warranty);return products.save(p);}
-    Map<String,Object> scope(String type){var n=new HashMap<String,Object>();n.put("scopeType",type);n.put("categoryIds",List.of(c1.getId(),c2.getId()));n.put("brandIds",List.of(b1.getId()));n.put("productIds",List.of(p1.getId(),p2.getId()));return n;}
+    /** Every list is sent; only the ones that belong to the type count, and p1 is already covered by CATEGORY (c1) and BRAND (b1). */
+    Map<String,Object> scope(String type){var n=new HashMap<String,Object>();n.put("scopeType",type);n.put("categoryIds",List.of(c1.getId(),c2.getId()));n.put("brandIds",List.of(b1.getId()));n.put("productIds",type.equals("PRODUCT")?List.of(p1.getId(),p2.getId()):List.of(p1.getId()));return n;}
     long create(String resource,Map<String,Object> n)throws Exception{return json.readTree(mvc.perform(post("/api/v1/admin/"+resource).with(user(email).roles("ADMIN")).with(csrf()).contentType("application/json").content(json.writeValueAsString(n))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).path("id").asLong();}
     @Test void promotionsPriceAndListingRespectEveryScopeAndNormalizeLists()throws Exception{
         for(String scope:List.of("ALL","CATEGORY","BRAND","PRODUCT")){

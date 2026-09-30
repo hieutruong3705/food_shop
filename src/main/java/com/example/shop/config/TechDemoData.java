@@ -24,12 +24,13 @@ public class TechDemoData implements CommandLineRunner {
         String[] titles={"Laptop NovaBook","Điện thoại Nova Phone","Máy tính bảng Nova Pad","Màn hình Nova Display","Bàn phím Nova Keys","Chuột Nova Mouse","Tai nghe Nova Sound","Hub USB-C Nova Connect"};
         String[] icons={"laptop","phone","tablet","monitor","keyboard","mouse","headphones","accessory"};
         long[] prices={15990000,7990000,5990000,3290000,890000,490000,1290000,690000};
+        String[] pitch={"Mỏng nhẹ, pin cả ngày, đủ mạnh cho học tập và làm việc.","Màn hình sáng, camera rõ nét, dùng mượt cả ngày.","Màn hình lớn để xem phim, đọc sách và ghi chú.","Hiển thị sắc nét, viền mỏng, dễ đặt cạnh laptop.","Gõ êm, hành trình phím ngắn, kết nối ổn định.","Ôm tay, cảm biến chính xác, dùng lâu không mỏi.","Âm thanh rõ, đeo êm, chống ồn khi cần tập trung.","Mở rộng cổng kết nối cho laptop và điện thoại chỉ với một sợi cáp."};
         Brand brand=brands.findByNameContainingIgnoreCase("Nova").stream().filter(b -> b.getName().equals("Nova")).findFirst().orElseGet(() -> {var b=new Brand();b.setName("Nova");b.setDescription("Thương hiệu giả lập dành cho dữ liệu demo");return brands.save(b);});
         for(int i=0;i<names.length;i++){
             final String name=names[i];Category cat=categories.findByNameContainingIgnoreCase(name).stream().filter(c -> c.getName().equals(name)).findFirst().orElseGet(() -> {var c=new Category();c.setName(name);return categories.save(c);});
             for(int j=1;j<=4;j++){
                 String sku="TECH-DEMO-"+i+"-"+j;if(products.existsBySku(sku))continue;
-                var p=new Product();p.setName(titles[i]+" "+j);p.setSku(sku);p.setSlug("nova-"+icons[i]+"-"+j);p.setPrice(prices[i]+(j-1)*100000);p.setQuantity(j==4?0:20+j);p.setCategory(cat);p.setBrand(brand);p.setWarrantyMonths(24);p.setShortDesc("Thiết kế tinh gọn, sẵn sàng cho công việc và giải trí.");p.setDetailDesc("Sản phẩm minh họa cho cửa hàng TechShop. Thông số và giá là dữ liệu demo, không đại diện sản phẩm thương mại.");
+                var p=new Product();p.setName(titles[i]+" "+j);p.setSku(sku);p.setSlug("nova-"+icons[i]+"-"+j);p.setPrice(prices[i]+(j-1)*100000);p.setQuantity(j==4?0:20+j);p.setCategory(cat);p.setBrand(brand);p.setWarrantyMonths(24);p.setShortDesc(pitch[i]);p.setDetailDesc("Sản phẩm minh họa cho cửa hàng TechShop. Thông số và giá là dữ liệu demo, không đại diện sản phẩm thương mại.");
                 var image=new ProductImage();image.setProduct(p);image.setImageUrl("/tech/"+icons[i]+".svg");p.getImages().add(image);
                 String[][] specs={{"Kết nối","USB-C / Bluetooth"},{"Bảo hành","24 tháng"},{"Phiên bản","Demo "+j}};
                 for(var pair:specs){var s=new ProductSpec();s.setProduct(p);s.setSpecName(pair[0]);s.setSpecValue(pair[1]);p.getSpecs().add(s);}ensureBrand(p);products.save(p);
@@ -45,7 +46,7 @@ public class TechDemoData implements CommandLineRunner {
             var image=new ProductImage();image.setProduct(p);image.setImageUrl("/tech/accessory.svg");p.getImages().add(image);ensureBrand(p);products.save(p);
         }
         if(promotions.findAll().stream().noneMatch(p->"TECH-DEMO-ORBIT".equals(p.getName()))){
-            var promotion=new Promotion();promotion.setName("TECH-DEMO-ORBIT");promotion.setDescription("Giảm 5% phụ kiện Orbit Demo");promotion.setDiscountRate(5);promotion.setStartDate(new java.util.Date());promotion.setEndDate(java.util.Date.from(java.time.Instant.now().plus(365,java.time.temporal.ChronoUnit.DAYS)));promotion.setScopeType(ScopeType.CATALOG);promotion.setBrands(java.util.List.of(orbit));promotion.setProducts(java.util.List.of());promotions.save(promotion);
+            var promotion=new Promotion();promotion.setName("TECH-DEMO-ORBIT");promotion.setDescription("Giảm 5% phụ kiện Orbit Demo");promotion.setDiscountRate(5);promotion.setStartDate(new java.util.Date());promotion.setEndDate(java.util.Date.from(java.time.Instant.now().plus(365,java.time.temporal.ChronoUnit.DAYS)));promotion.setScopeType(ScopeType.BRAND);promotion.setBrands(java.util.List.of(orbit));promotion.setProducts(java.util.List.of());promotions.save(promotion);
         }
         if(banners.findAll().stream().noneMatch(b->"TechShop Demo - Phụ kiện".equals(b.getName()))){var b=new Banner();b.setName("TechShop Demo - Phụ kiện");b.setImageUrl("/tech/accessory.svg");b.setLink("/products?brandId="+orbit.getId());b.setActive(true);b.setTechnologyCatalog(true);banners.save(b);}
         if(!products.existsBySku("TECH-DEMO-VARIANTS")){

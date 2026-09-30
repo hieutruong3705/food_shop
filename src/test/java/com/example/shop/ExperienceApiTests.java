@@ -22,7 +22,7 @@ class ExperienceApiTests {
     @Autowired PromotionRepository promotions; @Autowired VoucherRepository vouchers; @Autowired EntityManager em;
     Category category(){var c=new Category();c.setName(UUID.randomUUID().toString());return categories.save(c);}
     Product product(Category c){var p=new Product();p.setName(UUID.randomUUID().toString());p.setCategory(c);p.setPrice(1000000);p.setQuantity(2);p.setTechnologyCatalog(true);var b=new Brand();b.setName(UUID.randomUUID().toString());p.setBrand(brands.save(b));return products.save(p);}
-    void sold(Product p,String status,String method,String payment,long quantity){var o=new Order();o.setStatus(status);o.setPaymentMethod(method);o.setPaymentStatus(payment);orders.save(o);var d=new OrderDetail();d.setOrder(o);d.setProduct(p);d.setQuantity(quantity);d.setPrice(p.getPrice());lines.save(d);}
+    void sold(Product p,String status,String method,String payment,long quantity){var o=new Order();o.setStatus(OrderStatus.valueOf(status));o.setPaymentMethod(method);o.setPaymentStatus(PaymentStatus.valueOf(payment));orders.save(o);var d=new OrderDetail();d.setOrder(o);d.setProduct(p);d.setQuantity(quantity);d.setPrice(p.getPrice());lines.save(d);}
     @Test void rankingIsDatabaseSumLimitedToTenAndExcludesCancelledUnpaidAndOtherCategories()throws Exception{
         var c=category();var ranked=new ArrayList<Product>();
         for(int i=0;i<12;i++){var p=product(c);ranked.add(p);sold(p,"COMPLETED","COD","PAID",i+1);}
@@ -31,9 +31,9 @@ class ExperienceApiTests {
         sold(product(category()),"COMPLETED","COD","PAID",9000);em.flush();em.clear();
         var result=lines.topSales(c.getId(),org.springframework.data.domain.PageRequest.of(0,10));
         assertThat(result).hasSize(10);assertThat(result.get(0).getProductId()).isEqualTo(ranked.get(0).getId());assertThat(result.get(0).getUnits()).isEqualTo(21);
-        mvc.perform(get("/api/v1/catalog/menu").param("categoryId",Long.toString(c.getId()))).andExpect(status().isOk()).andExpect(jsonPath("$.bestSellers.length()").value(10)).andExpect(jsonPath("$.rankingSource").value("sales"));
+        mvc.perform(get("/api/v1/catalog/menu").param("categoryId",Long.toString(c.getId()))).andExpect(status().isOk()).andExpect(jsonPath("$.bestSellers.length()").value(10)).andExpect(jsonPath("$.newest.length()").value(5)).andExpect(jsonPath("$.newest[0].product.id").value(ranked.get(11).getId())).andExpect(jsonPath("$.rankingSource").value("sales"));
         var emptySales=category();product(emptySales);em.flush();em.clear();
-        mvc.perform(get("/api/v1/catalog/menu").param("categoryId",Long.toString(emptySales.getId()))).andExpect(status().isOk()).andExpect(jsonPath("$.rankingSource").value("newest")).andExpect(jsonPath("$.bestSellers.length()").value(1));
+        mvc.perform(get("/api/v1/catalog/menu").param("categoryId",Long.toString(emptySales.getId()))).andExpect(status().isOk()).andExpect(jsonPath("$.rankingSource").value("newest")).andExpect(jsonPath("$.bestSellers.length()").value(0)).andExpect(jsonPath("$.newest.length()").value(1));
     }
     @Test void offersRespectDatesLimitsAndPromotionFilter()throws Exception{
         var p=product(category());var offer=new Promotion();offer.setScopeType(ScopeType.PRODUCT);offer.setName("Live offer");offer.setDiscountRate(7);offer.setStartDate(new Date(System.currentTimeMillis()-10000));offer.setEndDate(new Date(System.currentTimeMillis()+100000));offer.setProducts(List.of(p));offer.setBrands(List.of());promotions.save(offer);

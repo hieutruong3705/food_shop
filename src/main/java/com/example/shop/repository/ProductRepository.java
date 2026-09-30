@@ -21,23 +21,17 @@ public interface ProductRepository extends JpaRepository<Product, Long>, org.spr
     /** SKUs are unique regardless of case, whatever the database collation says. */
     java.util.List<Product> findAllBySkuIgnoreCase(String sku);
 
-    List<Product> findByNameContainingIgnoreCaseAndCategoryId(String name, Long categoryId);
-
     List<Product> findByNameContainingIgnoreCase(String name);
 
-    List<Product> findByCategoryId(Long categoryId);
-
-    // Các hàm phục vụ sắp xếp (Sort)
-    List<Product> findByNameContainingIgnoreCaseAndCategoryId(String name, Long categoryId, Sort sort);
-
-    List<Product> findByNameContainingIgnoreCase(String name, Sort sort);
-
-    List<Product> findByCategoryId(Long categoryId, Sort sort);
-
-    @Query("SELECT p FROM Product p ORDER BY CASE WHEN p.quantity > 0 THEN 0 ELSE 1 END ASC, p.id DESC")
-    Page<Product> findAllSortedByStock(Pageable pageable);
-
     long count();
+
+    /** How many products a shopper can buy in each of the given categories, as {categoryId, count} rows. */
+    @Query("select p.category.id, count(p) from Product p where p.active = true and p.technologyCatalog = true and p.category.id in :ids group by p.category.id")
+    List<Object[]> sellableCountsByCategory(@org.springframework.data.repository.query.Param("ids") java.util.Collection<Long> ids);
+
+    /** The same by brand, as {brandId, count} rows. */
+    @Query("select p.brand.id, count(p) from Product p where p.active = true and p.technologyCatalog = true and p.brand.id in :ids group by p.brand.id")
+    List<Object[]> sellableCountsByBrand(@org.springframework.data.repository.query.Param("ids") java.util.Collection<Long> ids);
 
     // === ĐÃ FIX LỖI NHÂN BẢN DỮ LIỆU (CARTESIAN PRODUCT) ===
     // Dùng Subquery để lấy ảnh thay vì LEFT JOIN để tránh quantity bị nhân lên theo
@@ -52,7 +46,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, org.spr
             "FROM OrderDetail od " +
             "JOIN od.product p " +
             "JOIN od.order o " +
-            "WHERE o.status <> 'CANCELLED' " + // Loại bỏ các đơn hàng đã bị Hủy
+            "WHERE o.status <> com.example.shop.domain.OrderStatus.CANCELLED " + // Loại bỏ các đơn hàng đã bị Hủy
             "GROUP BY p.id, p.name, p.active " +
             "ORDER BY SUM(od.quantity) DESC")
     List<TopProductDTO> findBestSellingProducts(Pageable pageable);

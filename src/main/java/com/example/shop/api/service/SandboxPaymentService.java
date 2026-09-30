@@ -1,6 +1,8 @@
 package com.example.shop.api.service;
 
 import com.example.shop.domain.Order;
+import com.example.shop.domain.OrderStatus;
+import com.example.shop.domain.PaymentStatus;
 import com.example.shop.repository.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,7 @@ import javax.crypto.spec.SecretKeySpec;
 @Service
 public class SandboxPaymentService {
     @org.springframework.beans.factory.annotation.Autowired private VariantService variants;
+    @org.springframework.beans.factory.annotation.Autowired private VoucherUsage voucherUsage;
     private final OrderRepository orders; private final ProductRepository products;
     private final boolean enabled; private final String merchant,secret,clientUrl; private final Clock clock;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entities;
@@ -29,7 +32,7 @@ public class SandboxPaymentService {
     public boolean available(){return enabled && !merchant.isBlank() && !secret.isBlank();}
     public String paymentUrl(Order order,String ip){
         if(!available())throw new IllegalArgumentException("VNPay sandbox chưa được cấu hình");
-        if(!"VNPAY".equals(order.getPaymentMethod()) || !"UNPAID".equals(order.getPaymentStatus()) || !"PENDING".equals(order.getStatus()))throw new IllegalArgumentException("Đơn hàng không thể thanh toán trực tuyến");
+        if(!"VNPAY".equals(order.getPaymentMethod()) || order.getPaymentStatus()!=PaymentStatus.UNPAID || order.getStatus()!=OrderStatus.PENDING)throw new IllegalArgumentException("Đơn hàng không thể thanh toán trực tuyến");
         Instant expires=order.getCreatedAt().toInstant().plusSeconds(900);
         if(expires.isBefore(clock.instant()))throw new IllegalArgumentException("Phiên thanh toán đã hết hạn");
         var format=DateTimeFormatter.ofPattern("yyyyMMddHHmmss").withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
@@ -51,24 +54,26 @@ public class SandboxPaymentService {
         var optional=orders.lockById(id);if(optional.isEmpty())return reply("01","Order not found");Order o=optional.get();
         if(!"VNPAY".equals(o.getPaymentMethod()) || amount!=Math.round(o.getTotalPrice()*100))return reply("04","Invalid amount");
         boolean paid="00".equals(params.get("vnp_ResponseCode")) && "00".equals(params.get("vnp_TransactionStatus"));
-        if(!"UNPAID".equals(o.getPaymentStatus()) || !"PENDING".equals(o.getStatus())){
+        if(o.getPaymentStatus()!=PaymentStatus.UNPAID || o.getStatus()!=OrderStatus.PENDING){
             // Money was taken after the order was cancelled or expired. Stock may already belong to
             // someone else, so the order stays closed and the payment is flagged for a manual refund.
-            if(paid && isClosedWithoutPayment(o)){o.setPaymentStatus("REFUND_REQUIRED");o.setPaymentReference(reference(params));return reply("00","Confirmed");}
+            if(paid && isClosedWithoutPayment(o)){o.setPaymentStatus(PaymentStatus.REFUND_REQUIRED);o.setPaymentReference(reference(params));return reply("00","Confirmed");}
             return reply("02","Order already confirmed");
         }
-        if(paid){o.setPaymentStatus("PAID");o.setPaymentReference(reference(params));}
-        else {o.setPaymentStatus("FAILED");release(o);}
+        if(paid){o.setPaymentStatus(PaymentStatus.PAID);o.setPaymentReference(reference(params));}
+        else {o.setPaymentStatus(PaymentStatus.FAILED);release(o);}
         return reply("00","Confirmed");
     }
-    private static boolean isClosedWithoutPayment(Order o){return "CANCELLED".equals(o.getStatus()) && Set.of("UNPAID","EXPIRED","FAILED").contains(o.getPaymentStatus());}
+    private static boolean isClosedWithoutPayment(Order o){return o.getStatus()==OrderStatus.CANCELLED && Set.of(PaymentStatus.UNPAID,PaymentStatus.EXPIRED,PaymentStatus.FAILED).contains(o.getPaymentStatus());}
     private static String reference(Map<String,String> params){String value=params.get("vnp_TransactionNo");return value==null?null:value.substring(0,Math.min(value.length(),64));}
-    @Transactional public void expire(long id){var optional=orders.lockById(id);if(optional.isEmpty())return;var o=optional.get();if("VNPAY".equals(o.getPaymentMethod()) && "PENDING".equals(o.getStatus()) && "UNPAID".equals(o.getPaymentStatus()) && o.getCreatedAt().toInstant().plusSeconds(1200).isBefore(clock.instant())){o.setPaymentStatus("EXPIRED");release(o);}}
+    @Transactional public void expire(long id){var optional=orders.lockById(id);if(optional.isEmpty())return;var o=optional.get();if("VNPAY".equals(o.getPaymentMethod()) && o.getStatus()==OrderStatus.PENDING && o.getPaymentStatus()==PaymentStatus.UNPAID && o.getCreatedAt().toInstant().plusSeconds(1200).isBefore(clock.instant())){o.setPaymentStatus(PaymentStatus.EXPIRED);release(o);}}
     private void release(Order order){
+        // Voucher first, then products: checkout locks them in the same order.
+        voucherUsage.refund(order);
         for(var d:order.getOrderDetails().stream().sorted(Comparator.comparingLong(i->i.getProduct().getId())).toList()){
             variants.restore(d);
         }
-        order.setStatus("CANCELLED");
+        order.setStatus(OrderStatus.CANCELLED);
     }
     public static String canonical(Map<String,String> params){return new TreeMap<>(params).entrySet().stream().map(e->URLEncoder.encode(e.getKey(),StandardCharsets.US_ASCII)+"="+URLEncoder.encode(e.getValue(),StandardCharsets.US_ASCII)).collect(java.util.stream.Collectors.joining("&"));}
     private String sign(String data){try{var mac=Mac.getInstance("HmacSHA512");mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),"HmacSHA512"));return HexFormat.of().formatHex(mac.doFinal(data.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException("Cannot sign payment",e);}}

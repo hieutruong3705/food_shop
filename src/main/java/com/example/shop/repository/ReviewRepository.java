@@ -19,6 +19,9 @@ public interface ReviewRepository extends JpaRepository<Review, Long>, org.sprin
 
     boolean existsByUserAndProduct(User user, Product product);
     boolean existsByUserEmailAndProductId(String email,long productId);
+    /** The latest four and five star reviews of products a shopper can still buy. */
+    @Query("select r from Review r where r.rating >= 4 and r.product.active = true and r.product.technologyCatalog = true order by r.id desc")
+    List<Review> featured(org.springframework.data.domain.Pageable page);
     interface Summary {long getCount();Double getAverage();}
     @Query("select count(r) as count, coalesce(avg(r.rating),0.0) as average from Review r where r.product.id=:productId")
     Summary summarize(@Param("productId") long productId);

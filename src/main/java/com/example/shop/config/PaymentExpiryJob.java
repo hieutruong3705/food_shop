@@ -8,5 +8,5 @@ import org.springframework.scheduling.annotation.*;
 public class PaymentExpiryJob {
     private final OrderRepository orders;private final SandboxPaymentService payments;private final java.time.Clock clock;
     public PaymentExpiryJob(OrderRepository o,SandboxPaymentService p,java.time.Clock clock){orders=o;payments=p;this.clock=clock;}
-    @Scheduled(fixedDelay=60000,initialDelay=60000) public void expire(){for(var order:orders.findByPaymentMethodAndStatusAndPaymentStatusAndCreatedAtBefore("VNPAY","PENDING","UNPAID",java.util.Date.from(clock.instant().minusSeconds(1200))))payments.expire(order.getId());}
+    @Scheduled(fixedDelay=60000,initialDelay=60000) public void expire(){for(var order:orders.findByPaymentMethodAndStatusAndPaymentStatusAndCreatedAtBefore("VNPAY",com.example.shop.domain.OrderStatus.PENDING,com.example.shop.domain.PaymentStatus.UNPAID,java.util.Date.from(clock.instant().minusSeconds(1200))))payments.expire(order.getId());}
 }

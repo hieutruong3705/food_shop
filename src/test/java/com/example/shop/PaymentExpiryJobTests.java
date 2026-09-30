@@ -55,9 +55,9 @@ class PaymentExpiryJobTests {
         detail.setPrice(1500000);
         var order = new Order();
         order.setUser(buyer);
-        order.setStatus("PENDING");
+        order.setStatus(OrderStatus.PENDING);
         order.setPaymentMethod("VNPAY");
-        order.setPaymentStatus("UNPAID");
+        order.setPaymentStatus(PaymentStatus.UNPAID);
         order.setTotalPrice(1500000);
         order.setOrderDetails(List.of(detail));
         detail.setOrder(order);
@@ -69,8 +69,8 @@ class PaymentExpiryJobTests {
         context.getBean(PaymentExpiryJob.class).expire();
 
         var expired = orders.findById(order.getId()).orElseThrow();
-        assertThat(expired.getStatus()).isEqualTo("CANCELLED");
-        assertThat(expired.getPaymentStatus()).isEqualTo("EXPIRED");
+        assertThat(expired.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(expired.getPaymentStatus()).isEqualTo(PaymentStatus.EXPIRED);
         var restored = products.findById(product.getId()).orElseThrow();
         assertThat(restored.getQuantity()).isEqualTo(2);
         assertThat(restored.getSold()).isZero();

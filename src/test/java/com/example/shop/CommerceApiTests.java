@@ -240,6 +240,62 @@ class CommerceApiTests {
         add(other,1);
         assertThatThrownBy(()->commerce.checkout(other.getEmail(),UUID.randomUUID().toString(),input(code))).hasMessageContaining("hết lượt");
     }
+    @Autowired com.example.shop.api.service.SandboxPaymentService payments;
+    Voucher limitedVoucher(String prefix){
+        var v=new Voucher();v.setCode(prefix+UUID.randomUUID().toString().toUpperCase(Locale.ROOT));v.setAll(true);v.setDiscount(10);v.setUsageLimit(1L);return vouchers.save(v);
+    }
+    long used(Voucher v){return vouchers.findById(v.getId()).orElseThrow().getUsedCount();}
+    @Test void cancellingAnOrderGivesTheVoucherUseBackExactlyOnce()throws Exception{
+        add(buyer,1);add(other,1);
+        var v=limitedVoucher("REFUND-");final String code=v.getCode();
+        var order=commerce.checkout(buyer.getEmail(),UUID.randomUUID().toString(),input(code));
+        assertThat(used(v)).isEqualTo(1);
+        assertThatThrownBy(()->commerce.checkout(other.getEmail(),UUID.randomUUID().toString(),input(code))).hasMessageContaining("hết lượt");
+        commerce.status(buyer.getEmail(),order.id(),"CANCELLED",false);
+        assertThat(used(v)).isZero();
+        commerce.status(buyer.getEmail(),order.id(),"CANCELLED",false);
+        assertThat(used(v)).isZero();
+        commerce.checkout(other.getEmail(),UUID.randomUUID().toString(),input(code));
+        assertThat(used(v)).isEqualTo(1);
+    }
+    @Test void anExpiredOnlineOrderGivesTheVoucherUseBack()throws Exception{
+        add(buyer,1);
+        var v=limitedVoucher("EXPIRE-");
+        var order=commerce.checkout(buyer.getEmail(),UUID.randomUUID().toString(),input(v.getCode()));
+        assertThat(used(v)).isEqualTo(1);
+        var stored=orders.findById(order.id()).orElseThrow();stored.setPaymentMethod("VNPAY");stored.setCreatedAt(new Date(System.currentTimeMillis()-3600000));orders.save(stored);
+        payments.expire(order.id());
+        assertThat(orders.findById(order.id()).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(used(v)).isZero();
+        payments.expire(order.id());
+        assertThat(used(v)).isZero();
+    }
+    @Test void aDeletedVoucherDoesNotBlockCancellingItsOrder()throws Exception{
+        add(buyer,1);
+        var v=limitedVoucher("GONE-");
+        var order=commerce.checkout(buyer.getEmail(),UUID.randomUUID().toString(),input(v.getCode()));
+        vouchers.deleteById(v.getId());
+        assertThat(commerce.status(buyer.getEmail(),order.id(),"CANCELLED",false).status()).isEqualTo("CANCELLED");
+    }
+    @Test void popularSortRanksByConfirmedUnitsNotByPendingOrders()throws Exception{
+        String key=UUID.randomUUID().toString();
+        product.setName(key+" pending");products.save(product);
+        var hot=new Product();hot.setName(key+" hot");hot.setPrice(1000000);hot.setQuantity(10);hot.setSku(UUID.randomUUID().toString());hot=products.save(hot);
+        commerce.add(buyer.getEmail(),new AddItem(product.getId(),5));
+        commerce.checkout(buyer.getEmail(),UUID.randomUUID().toString(),input(null));
+        commerce.add(other.getEmail(),new AddItem(hot.getId(),1));
+        var confirmed=commerce.checkout(other.getEmail(),UUID.randomUUID().toString(),input(null));
+        commerce.status(admin.getEmail(),confirmed.id(),"CONFIRMED",true);
+        mvc.perform(get("/api/v1/products").param("search",key).param("sort","popular")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].name").value(key+" hot")).andExpect(jsonPath("$.content[1].name").value(key+" pending"));
+    }
+    @Test void cartLineRemembersThePriceWhenItWasAddedSoTheShopperSeesAChange(){
+        commerce.add(buyer.getEmail(),new AddItem(product.getId(),1));
+        product.setPrice(2500000);products.save(product);
+        var line=commerce.getCart(buyer.getEmail()).items().get(0);
+        assertThat(line.addedPrice()).isEqualTo(2000000);
+        assertThat(line.price()).isEqualTo(2500000);
+    }
     @Test void simultaneousVoucherUseHonorsLimit()throws Exception{
         add(buyer,1);add(other,1);
         var v=new Voucher();v.setCode("LIMIT-"+UUID.randomUUID().toString().toUpperCase(Locale.ROOT));v.setAll(true);v.setDiscount(10);v.setUsageLimit(1L);v=vouchers.save(v);
@@ -325,7 +381,7 @@ class CommerceApiTests {
         product.setCategory(laptops);product.setPrice(1000000);products.save(product);
         var extra=new Product();extra.setName("Other line "+UUID.randomUUID());extra.setPrice(otherLinePrice);extra.setQuantity(3);extra=products.save(extra);
         var v=new Voucher();String code="MIN-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);
-        v.setCode(code);v.setDiscount(10);v.setScopeType(ScopeType.CATALOG);v.setCategories(new ArrayList<>(List.of(laptops)));v.setMinimumOrder(5000000);vouchers.save(v);
+        v.setCode(code);v.setDiscount(10);v.setScopeType(ScopeType.CATEGORY);v.setCategories(new ArrayList<>(List.of(laptops)));v.setMinimumOrder(5000000);vouchers.save(v);
         commerce.add(buyer.getEmail(),new AddItem(product.getId(),1));commerce.add(buyer.getEmail(),new AddItem(extra.getId(),1));
         if(applies){
             var quote=commerce.quote(buyer.getEmail(),code,null);
@@ -341,16 +397,5 @@ class CommerceApiTests {
         if(percent>0){var v=new Voucher();code="SHIP-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);v.setCode(code);v.setDiscount(percent);v.setAll(true);vouchers.save(v);}
         var quote=commerce.quote(buyer.getEmail(),code,null);
         assertThat(quote.shippingFee()).isEqualTo(shipping);assertThat(quote.totalPrice()).isEqualTo(total);
-    }
-    @Test void voucherUsageIsNotReturnedWhenTheOrderIsCancelled(){
-        var v=new Voucher();String code="ONCE-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);
-        v.setCode(code);v.setDiscount(10);v.setAll(true);v.setUsageLimit(1L);v=vouchers.save(v);
-        commerce.add(buyer.getEmail(),new AddItem(product.getId(),1));
-        var order=commerce.checkout(buyer.getEmail(),UUID.randomUUID().toString(),input(code));
-        assertThat(vouchers.findById(v.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
-        commerce.status(buyer.getEmail(),order.id(),"CANCELLED",false);
-        assertThat(vouchers.findById(v.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
-        commerce.add(other.getEmail(),new AddItem(product.getId(),1));
-        assertThatThrownBy(()->commerce.checkout(other.getEmail(),UUID.randomUUID().toString(),input(code))).hasMessageContaining("hết lượt");
     }
 }

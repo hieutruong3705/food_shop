@@ -17,6 +17,7 @@ import java.util.*;
 @Service @Transactional
 public class CommerceService {
     @org.springframework.beans.factory.annotation.Autowired private VariantService variants;
+    @org.springframework.beans.factory.annotation.Autowired private VoucherUsage voucherUsage;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
     private final UserRepository users;
     private final CartRepository carts;
@@ -48,7 +49,7 @@ public class CommerceService {
         return c;
     }
     private CartView view(Discounts discounts,Cart c) {
-        List<CartLine> lines=c.getCartItems().stream().map(i -> new CartLine(i.getId(),i.getProduct().getId(),i.getProduct().getName(),i.getVariant()!=null && i.getVariant().getImageUrl()!=null && !i.getVariant().getImageUrl().isBlank()?i.getVariant().getImageUrl():i.getProduct().getImage(),i.getQuantity(),VariantService.stock(i.getProduct(),i.getVariant()),price(discounts,i.getProduct(),i.getVariant()),i.getProduct().isActive() && i.getProduct().isTechnologyCatalog() && (i.getVariant()==null?!i.getProduct().hasVariants():i.getVariant().isActive()),i.getVariant()==null?null:i.getVariant().getId(),i.getVariant()==null?null:i.getVariant().getLabel())).toList();
+        List<CartLine> lines=c.getCartItems().stream().map(i -> new CartLine(i.getId(),i.getProduct().getId(),i.getProduct().getName(),i.getVariant()!=null && i.getVariant().getImageUrl()!=null && !i.getVariant().getImageUrl().isBlank()?i.getVariant().getImageUrl():i.getProduct().getImage(),i.getQuantity(),VariantService.stock(i.getProduct(),i.getVariant()),price(discounts,i.getProduct(),i.getVariant()),i.getProduct().isActive() && i.getProduct().isTechnologyCatalog() && (i.getVariant()==null?!i.getProduct().hasVariants():i.getVariant().isActive()),i.getVariant()==null?null:i.getVariant().getId(),i.getVariant()==null?null:i.getVariant().getLabel(),i.getVariant()==null?i.getProduct().getPrice():i.getVariant().getPrice(),discounts.rate(i.getProduct()),i.getPrice())).toList();
         return new CartView(lines,lines.stream().mapToLong(CartLine::quantity).sum(),lines.stream().mapToDouble(i -> i.price()*i.quantity()).sum());
     }
     @Transactional(readOnly=true)
@@ -134,7 +135,7 @@ public class CommerceService {
         Order o=new Order(); o.setUser(u); o.setCheckoutKey(scopedKey); o.setCheckoutFingerprint(fingerprint);
         o.setReceiverName(input.receiverName().trim()); o.setReceiverAddress(input.receiverAddress().trim()); o.setReceiverPhone(input.receiverPhone());
         o.setNote(input.note()==null?null:input.note().trim());
-        o.setStatus("PENDING"); o.setPaymentMethod(input.paymentMethod()); o.setPaymentStatus("UNPAID");
+        o.setStatus(OrderStatus.PENDING); o.setPaymentMethod(input.paymentMethod()); o.setPaymentStatus(PaymentStatus.UNPAID);
         List<OrderDetail> lines=new ArrayList<>(); BigDecimal subtotal=BigDecimal.ZERO, eligible=BigDecimal.ZERO;
         Voucher voucher=resolveVoucher(input.voucherCode(),true);
         var discounts=pricing.current();
@@ -171,23 +172,25 @@ public class CommerceService {
     public OrderView detail(String email,long id,boolean admin) { return CommerceResponse.order(findOrder(email,id,admin,false)); }
     public OrderView archive(String email,long id,boolean archived){
         var order=requireOrder(email,id,true);
-        if(!Set.of("COMPLETED","CANCELLED").contains(order.getStatus()))throw new IllegalArgumentException("Chỉ lưu trữ đơn đã kết thúc");
+        if(order.getStatus()!=OrderStatus.COMPLETED && order.getStatus()!=OrderStatus.CANCELLED)throw new IllegalArgumentException("Chỉ lưu trữ đơn đã kết thúc");
         if(archived && order.isRefundRequired())throw new IllegalArgumentException("Đơn cần hoàn tiền chưa thể lưu trữ");
         order.setAdminArchived(archived);return CommerceResponse.order(order);
     }
-    public OrderView status(String email,long id,String next,boolean admin) {
-        Order o=requireOrder(email,id,admin); String current=o.getStatus();
-        if(current.equals(next)) return CommerceResponse.order(o);
-        boolean allowed=admin ? com.example.shop.domain.OrderTransitions.allowed(o).contains(next) : "PENDING".equals(current) && "CANCELLED".equals(next);
+    public OrderView status(String email,long id,String requested,boolean admin) {
+        Order o=requireOrder(email,id,admin); OrderStatus current=o.getStatus(), next=OrderStatus.parse(requested);
+        if(current==next) return CommerceResponse.order(o);
+        boolean allowed=admin ? OrderTransitions.allowed(o).contains(next) : current==OrderStatus.PENDING && next==OrderStatus.CANCELLED;
         if(!allowed) throw new IllegalArgumentException("Không thể chuyển trạng thái đơn hàng");
-        if(!"CANCELLED".equals(next) && "VNPAY".equals(o.getPaymentMethod()) && !"PAID".equals(o.getPaymentStatus()))throw new IllegalArgumentException("Đơn trực tuyến chưa thanh toán thành công");
-        if("CANCELLED".equals(next)) {
-            if("PAID".equals(o.getPaymentStatus())) throw new IllegalArgumentException("Đơn đã thanh toán cần xử lý hoàn tiền trước");
+        if(next!=OrderStatus.CANCELLED && "VNPAY".equals(o.getPaymentMethod()) && o.getPaymentStatus()!=PaymentStatus.PAID)throw new IllegalArgumentException("Đơn trực tuyến chưa thanh toán thành công");
+        if(next==OrderStatus.CANCELLED) {
+            if(o.getPaymentStatus()==PaymentStatus.PAID) throw new IllegalArgumentException("Đơn đã thanh toán cần xử lý hoàn tiền trước");
+            // Voucher first, then products: checkout locks them in the same order.
+            voucherUsage.refund(o);
             for(OrderDetail d:o.getOrderDetails().stream().sorted(Comparator.comparingLong(x -> x.getProduct().getId())).toList()) {
                 variants.restore(d);
             }
         }
-        if("COMPLETED".equals(next)) { o.setCompletedAt(Date.from(clock.instant())); o.setPaymentStatus("PAID"); }
+        if(next==OrderStatus.COMPLETED) { o.setCompletedAt(Date.from(clock.instant())); o.setPaymentStatus(PaymentStatus.PAID); }
         o.setStatus(next); return CommerceResponse.order(o);
     }
     private static double price(Discounts discounts,Product p,ProductVariant variant) {

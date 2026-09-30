@@ -59,7 +59,7 @@ public class PromotionPricing {
         List<Entry> entries = new ArrayList<>();
         for (Promotion p : running) {
             Set<Long> none = Set.of();
-            entries.add(new Entry(Math.min(100, p.getDiscountRate()), new Scope(p.getScopeType(),
+            entries.add(new Entry(p.getId(), p.getName(), p.getEndDate(), Math.min(100, p.getDiscountRate()), new Scope(p.getScopeType(),
                     categories.getOrDefault(p.getId(), none), brands.getOrDefault(p.getId(), none), products.getOrDefault(p.getId(), none))));
         }
         return new Discounts(List.copyOf(entries));
@@ -73,7 +73,10 @@ public class PromotionPricing {
         return result;
     }
 
-    private record Entry(double rate, Scope scope) {}
+    private record Entry(long promotionId, String name, Date endDate, double rate, Scope scope) {}
+
+    /** The running promotion that gives a product its price: shown as the sale tag. */
+    public record Sale(long promotionId, String name, double rate, Date endDate) {}
 
     public static final class Discounts {
         /** No promotion is running. */
@@ -85,13 +88,19 @@ public class PromotionPricing {
             this.entries = entries;
         }
 
+        /** The running promotion with the highest rate among those covering the product, or null. */
+        public Sale sale(Product product) {
+            Entry best = null;
+            for (Entry entry : entries) {
+                if ((best == null || entry.rate() > best.rate()) && entry.rate() > 0 && entry.scope().matches(product)) best = entry;
+            }
+            return best == null ? null : new Sale(best.promotionId(), best.name(), best.rate(), best.endDate());
+        }
+
         /** Highest running discount rate (percent) that covers the product, or 0. */
         public double rate(Product product) {
-            double best = 0;
-            for (Entry entry : entries) {
-                if (entry.rate() > best && entry.scope().matches(product)) best = entry.rate();
-            }
-            return best;
+            Sale sale = sale(product);
+            return sale == null ? 0 : sale.rate();
         }
 
         /** The price a shopper pays for a product (or one of its variants) listed at {@code listPrice}. */

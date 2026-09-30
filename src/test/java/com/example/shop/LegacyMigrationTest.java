@@ -27,13 +27,29 @@ class LegacyMigrationTest {
                 s.executeUpdate("INSERT INTO brand_promotion(promotion_id,brand_id) VALUES(1,1),(2,1)");
             }
         }
-        var flyway=Flyway.configure().dataSource(url,user,password).baselineOnMigrate(true).baselineVersion("1").load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(9);
+        var upToV10=Flyway.configure().dataSource(url,user,password).baselineOnMigrate(true).baselineVersion("1").target("10").load();
+        assertThat(upToV10.migrate().migrationsExecuted).isEqualTo(9);
+        try(var connection=DriverManager.getConnection(url,user,password);var s=connection.createStatement()){
+            // Offers saved while the combined CATALOG type existed: both groups, and a category only.
+            s.executeUpdate("INSERT INTO promotions(id,name,discount_rate,active,scope_type) VALUES(10,'Both',5,1,'CATALOG'),(11,'CategoryOnly',5,1,'CATALOG')");
+            s.executeUpdate("INSERT INTO promotion_category(promotion_id,category_id) VALUES(10,1),(11,1)");
+            s.executeUpdate("INSERT INTO brand_promotion(promotion_id,brand_id) VALUES(10,1)");
+            s.executeUpdate("INSERT INTO vouchers(id,code,discount,scope_type) VALUES(2,'BOTH',10,'CATALOG')");
+            s.executeUpdate("INSERT INTO voucher_category(voucher_id,category_id) VALUES(2,1)");
+            s.executeUpdate("INSERT INTO voucher_brand(voucher_id,brand_id) VALUES(2,1)");
+        }
+        var flyway=Flyway.configure().dataSource(url,user,password).load();
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         try(var connection=DriverManager.getConnection(url,user,password);var s=connection.createStatement()){
             try(var r=s.executeQuery("SELECT COUNT(*) FROM category_brands WHERE category_id=1 AND brand_id=1")){r.next();assertThat(r.getInt(1)).isEqualTo(1);}
             try(var r=s.executeQuery("SELECT scope_type FROM vouchers WHERE id=1")){r.next();assertThat(r.getString(1)).isEqualTo("ALL");}
-            try(var r=s.executeQuery("SELECT COUNT(*) FROM promotions WHERE scope_type='CATALOG'")){r.next();assertThat(r.getInt(1)).isEqualTo(2);}
+            try(var r=s.executeQuery("SELECT COUNT(*) FROM promotions WHERE scope_type='BRAND' AND id IN (1,2)")){r.next();assertThat(r.getInt(1)).isEqualTo(2);}
+            try(var r=s.executeQuery("SELECT (SELECT COUNT(*) FROM promotions WHERE scope_type='CATALOG')+(SELECT COUNT(*) FROM vouchers WHERE scope_type='CATALOG')")){r.next();assertThat(r.getInt(1)).isZero();}
+            // Categories AND brands became the products in both; one group keeps its group.
+            try(var r=s.executeQuery("SELECT p.scope_type,(SELECT COUNT(*) FROM product_promotion x WHERE x.promotion_id=p.id AND x.product_id=1),(SELECT COUNT(*) FROM promotion_category c WHERE c.promotion_id=p.id),(SELECT COUNT(*) FROM brand_promotion b WHERE b.promotion_id=p.id) FROM promotions p WHERE p.id=10")){r.next();assertThat(r.getString(1)).isEqualTo("PRODUCT");assertThat(r.getInt(2)).isEqualTo(1);assertThat(r.getInt(3)).isZero();assertThat(r.getInt(4)).isZero();}
+            try(var r=s.executeQuery("SELECT scope_type FROM promotions WHERE id=11")){r.next();assertThat(r.getString(1)).isEqualTo("CATEGORY");}
+            try(var r=s.executeQuery("SELECT v.scope_type,(SELECT COUNT(*) FROM voucher_product x WHERE x.voucher_id=v.id AND x.product_id=1),(SELECT COUNT(*) FROM voucher_category c WHERE c.voucher_id=v.id),(SELECT COUNT(*) FROM voucher_brand b WHERE b.voucher_id=v.id) FROM vouchers v WHERE v.id=2")){r.next();assertThat(r.getString(1)).isEqualTo("PRODUCT");assertThat(r.getInt(2)).isEqualTo(1);assertThat(r.getInt(3)).isZero();assertThat(r.getInt(4)).isZero();}
             try(var r=s.executeQuery("SELECT p.discount_rate FROM promotions p JOIN product_promotion x ON x.promotion_id=p.id WHERE p.scope_type='PRODUCT' AND x.product_id=1")){r.next();assertThat(r.getDouble(1)).isEqualTo(7);}
             try(var r=s.executeQuery("SELECT variant_id,variant_label FROM order_details WHERE id=1")){assertThat(r.next()).isTrue();assertThat(r.getObject(1)).isNull();assertThat(r.getString(2)).isNull();}
             try(var r=s.executeQuery("SELECT COUNT(*) FROM product_variants")){assertThat(r.next()).isTrue();assertThat(r.getLong(1)).isZero();}

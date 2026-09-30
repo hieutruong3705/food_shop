@@ -18,7 +18,7 @@ import jakarta.persistence.Table;
 @Table(name = "vouchers")
 public class Voucher implements Serializable,ScopedOffer {
     @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING) @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
-    @jakarta.persistence.Column(nullable=false,length=20) private ScopeType scopeType=ScopeType.CATALOG;
+    @jakarta.persistence.Column(nullable=false,length=20) private ScopeType scopeType=ScopeType.CATEGORY;
     public ScopeType getScopeType(){return scopeType;}
     public void setScopeType(ScopeType type){scopeType=type;}
     @ManyToMany
@@ -100,7 +100,7 @@ public class Voucher implements Serializable,ScopedOffer {
     }
 
     public void setAll(boolean all) {
-        this.scopeType=all?ScopeType.ALL:ScopeType.CATALOG;
+        this.scopeType=all?ScopeType.ALL:ScopeType.CATEGORY;
     }
 
     public List<Category> getCategories() {

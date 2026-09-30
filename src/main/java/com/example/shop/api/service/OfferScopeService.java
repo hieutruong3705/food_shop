@@ -26,11 +26,12 @@ import java.util.stream.Collectors;
 /**
  * Reads, validates and previews the "applies to" part of a voucher or promotion payload.
  *
- * <p>Payload: {@code scopeType} (ALL, CATALOG or PRODUCT) plus {@code categoryIds}, {@code brandIds}
- * and {@code productIds}. CATALOG takes categories and/or brands; PRODUCT takes products; lists that
- * do not belong to the chosen type are ignored. Payloads from before CATALOG existed still work:
- * {@code CATEGORY} and {@code BRAND} read only their own list, and a missing {@code scopeType}
- * is inferred from whichever list is filled (vouchers may also send {@code all}).
+ * <p>Payload: {@code scopeType} (ALL, CATEGORY, BRAND or PRODUCT) plus {@code categoryIds},
+ * {@code brandIds} and {@code productIds}. CATEGORY takes whole categories and/or single products,
+ * BRAND takes whole brands and/or single products, PRODUCT takes products; lists that do not belong
+ * to the chosen type are ignored, and so are products a chosen category or brand already covers. A
+ * missing {@code scopeType} is inferred from whichever list is filled (vouchers may also send
+ * {@code all}), which keeps older payloads working.
  */
 @Service
 @Transactional
@@ -114,30 +115,39 @@ public class OfferScopeService {
 
     private Resolved resolve(ScopeInput n, boolean voucher) {
         String declared = n.scopeType() == null ? "" : n.scopeType().trim();
+        // CATALOG was the short-lived combined type; its payloads are read like ones without a type.
+        if (declared.equalsIgnoreCase("CATALOG")) declared = "";
         List<Long> categoryIds = ids(n.categoryIds());
         List<Long> brandIds = ids(n.brandIds());
         List<Long> productIds = ids(n.productIds());
         ScopeType type;
         if (declared.isEmpty()) {
-            boolean catalog = !categoryIds.isEmpty() || !brandIds.isEmpty();
             if (voucher && Boolean.TRUE.equals(n.all())) type = ScopeType.ALL;
-            else if (catalog && !productIds.isEmpty()) throw new IllegalArgumentException("Chọn một phạm vi áp dụng");
-            else if (catalog) type = ScopeType.CATALOG;
+            else if (!categoryIds.isEmpty() && !brandIds.isEmpty()) throw new IllegalArgumentException("Chọn theo danh mục hoặc theo thương hiệu, không chọn cả hai");
+            else if (!categoryIds.isEmpty()) type = ScopeType.CATEGORY;
+            else if (!brandIds.isEmpty()) type = ScopeType.BRAND;
             else if (!productIds.isEmpty()) type = ScopeType.PRODUCT;
             else throw new IllegalArgumentException("Chọn ít nhất một mục cho phạm vi áp dụng");
         } else {
             type = ScopeType.parse(declared);
-            if (declared.equalsIgnoreCase("CATEGORY")) brandIds = List.of();
-            if (declared.equalsIgnoreCase("BRAND")) categoryIds = List.of();
         }
-        if (type == ScopeType.ALL) return new Resolved(type, List.of(), List.of(), List.of());
-        if (type == ScopeType.PRODUCT) {
-            categoryIds = List.of();
-            brandIds = List.of();
-            if (productIds.isEmpty()) throw new IllegalArgumentException("Chọn ít nhất một sản phẩm");
-        } else {
-            productIds = List.of();
-            if (categoryIds.isEmpty() && brandIds.isEmpty()) throw new IllegalArgumentException("Chọn ít nhất một danh mục hoặc một thương hiệu");
+        switch (type) {
+            case ALL -> {
+                return new Resolved(type, List.of(), List.of(), List.of());
+            }
+            case CATEGORY -> {
+                brandIds = List.of();
+                if (categoryIds.isEmpty() && productIds.isEmpty()) throw new IllegalArgumentException("Chọn ít nhất một danh mục hoặc một sản phẩm");
+            }
+            case BRAND -> {
+                categoryIds = List.of();
+                if (brandIds.isEmpty() && productIds.isEmpty()) throw new IllegalArgumentException("Chọn ít nhất một thương hiệu hoặc một sản phẩm");
+            }
+            case PRODUCT -> {
+                categoryIds = List.of();
+                brandIds = List.of();
+                if (productIds.isEmpty()) throw new IllegalArgumentException("Chọn ít nhất một sản phẩm");
+            }
         }
         var cs = categories.findAllById(categoryIds);
         var bs = brands.findAllById(brandIds);
@@ -146,14 +156,11 @@ public class OfferScopeService {
                 || ps.size() != new HashSet<>(productIds).size()) {
             throw new IllegalArgumentException("Mục áp dụng không tồn tại");
         }
-        if (!cs.isEmpty() && !bs.isEmpty()) {
-            Set<Long> offered = cs.stream().flatMap(c -> c.getBrands().stream()).map(Brand::getId).collect(Collectors.toSet());
-            List<String> unrelated = bs.stream().filter(b -> !offered.contains(b.getId())).map(Brand::getName).sorted().toList();
-            if (!unrelated.isEmpty()) {
-                throw new IllegalArgumentException("Thương hiệu " + String.join(", ", unrelated)
-                        + " chưa được gán cho các danh mục đã chọn, nên sẽ không có sản phẩm nào. Hãy bỏ chọn hoặc gán thương hiệu trong Quản trị → Danh mục.");
-            }
-        }
+        // A product already covered by a whole category or brand of the same offer adds nothing.
+        Set<Long> coveredCategories = cs.stream().map(Category::getId).collect(Collectors.toSet());
+        Set<Long> coveredBrands = bs.stream().map(Brand::getId).collect(Collectors.toSet());
+        ps = ps.stream().filter(p -> !(p.getCategory() != null && coveredCategories.contains(p.getCategory().getId()))
+                && !(p.getBrand() != null && coveredBrands.contains(p.getBrand().getId()))).toList();
         return new Resolved(type, cs, bs, ps);
     }
 

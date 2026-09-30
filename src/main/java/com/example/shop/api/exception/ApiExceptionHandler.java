@@ -16,7 +16,15 @@ public class ApiExceptionHandler {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler({org.springframework.web.servlet.resource.NoResourceFoundException.class, org.springframework.web.servlet.NoHandlerFoundException.class})
-    public ResponseEntity<Map<String,Object>> missingRoute(Exception exception) {
+    public ResponseEntity<?> missingRoute(Exception exception, jakarta.servlet.http.HttpServletRequest request) {
+        // A browser opening an unknown page gets the web app (which shows its own "not found" page)
+        // with status 404; API calls and missing files keep the JSON error.
+        String path = request.getRequestURI();
+        String accept = request.getHeader("Accept");
+        boolean page = "GET".equals(request.getMethod()) && !path.startsWith("/api/") && !path.substring(path.lastIndexOf('/') + 1).contains(".")
+                && accept != null && accept.contains("text/html");
+        var index = new org.springframework.core.io.ClassPathResource("static/index.html");
+        if (page && index.exists()) return ResponseEntity.status(HttpStatus.NOT_FOUND).contentType(org.springframework.http.MediaType.TEXT_HTML).body(index);
         return error(HttpStatus.NOT_FOUND, "Không tìm thấy tài nguyên", Map.of());
     }
 

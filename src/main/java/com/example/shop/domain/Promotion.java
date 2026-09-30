@@ -11,7 +11,7 @@ import java.util.List;
 @Table(name = "promotions")
 public class Promotion implements Serializable,ScopedOffer {
     @Enumerated(EnumType.STRING) @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
-    @Column(nullable=false,length=20) private ScopeType scopeType=ScopeType.CATALOG;
+    @Column(nullable=false,length=20) private ScopeType scopeType=ScopeType.CATEGORY;
     public ScopeType getScopeType(){return scopeType;}
     public void setScopeType(ScopeType type){scopeType=type;}
     @ManyToMany
@@ -42,15 +42,6 @@ public class Promotion implements Serializable,ScopedOffer {
     private List<Product> products=new java.util.ArrayList<>();
 
     public Promotion() {
-    }
-
-    // --- LOGIC TRẠNG THÁI (Tính theo Giờ & Phút) ---
-    public boolean isExpired() {
-        return this.endDate != null && new Date().after(this.endDate);
-    }
-
-    public boolean isUpcoming() {
-        return this.startDate != null && new Date().before(this.startDate);
     }
 
     // --- Getter & Setter ---

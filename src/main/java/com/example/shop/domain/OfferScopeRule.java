@@ -3,6 +3,7 @@ package com.example.shop.domain;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -13,6 +14,10 @@ import java.util.Set;
  * {@code promotionId} product filter and the admin preview. It exists in two forms that must
  * agree, an in-memory test ({@link Scope#matches}) and a database predicate
  * ({@link Scope#predicate}); {@code OfferScopeTests} runs both over the same data.
+ *
+ * <p>A scope is a union, never an intersection: a product matches when it is in one of the listed
+ * categories (CATEGORY scopes), in one of the listed brands (BRAND scopes) or is one of the listed
+ * products (all scopes but ALL). Lists that do not belong to the scope type are ignored.
  */
 public final class OfferScopeRule {
     private OfferScopeRule() {}
@@ -34,13 +39,21 @@ public final class OfferScopeRule {
             return Set.copyOf(result);
         }
 
+        private Set<Long> wholeCategories() {
+            return type == ScopeType.CATEGORY ? categoryIds : Set.of();
+        }
+
+        private Set<Long> wholeBrands() {
+            return type == ScopeType.BRAND ? brandIds : Set.of();
+        }
+
+        private Set<Long> chosenProducts() {
+            return type == ScopeType.ALL ? Set.of() : productIds;
+        }
+
         /** A scope that lists nothing selects nothing; the admin API refuses to save one. */
         public boolean isEmpty() {
-            return switch (type) {
-                case ALL -> false;
-                case CATALOG -> categoryIds.isEmpty() && brandIds.isEmpty();
-                case PRODUCT -> productIds.isEmpty();
-            };
+            return type != ScopeType.ALL && wholeCategories().isEmpty() && wholeBrands().isEmpty() && chosenProducts().isEmpty();
         }
 
         public boolean matches(Product product) {
@@ -49,25 +62,21 @@ public final class OfferScopeRule {
         }
 
         public boolean matches(Long categoryId, Long brandId, long productId) {
-            if (isEmpty()) return false;
-            return switch (type) {
-                case ALL -> true;
-                case CATALOG -> (categoryIds.isEmpty() || (categoryId != null && categoryIds.contains(categoryId)))
-                        && (brandIds.isEmpty() || (brandId != null && brandIds.contains(brandId)));
-                case PRODUCT -> productIds.contains(productId);
-            };
+            if (type == ScopeType.ALL) return true;
+            return (categoryId != null && wholeCategories().contains(categoryId))
+                    || (brandId != null && wholeBrands().contains(brandId))
+                    || chosenProducts().contains(productId);
         }
 
         /** The same test as {@link #matches(Long, Long, long)}, evaluated by the database. */
         public Predicate predicate(Root<Product> root, CriteriaBuilder cb) {
+            if (type == ScopeType.ALL) return cb.conjunction();
             if (isEmpty()) return cb.disjunction();
-            return switch (type) {
-                case ALL -> cb.conjunction();
-                case CATALOG -> cb.and(
-                        categoryIds.isEmpty() ? cb.conjunction() : root.get("category").get("id").in(categoryIds),
-                        brandIds.isEmpty() ? cb.conjunction() : root.get("brand").get("id").in(brandIds));
-                case PRODUCT -> root.get("id").in(productIds);
-            };
+            var any = new ArrayList<Predicate>();
+            if (!wholeCategories().isEmpty()) any.add(root.get("category").get("id").in(wholeCategories()));
+            if (!wholeBrands().isEmpty()) any.add(root.get("brand").get("id").in(wholeBrands()));
+            if (!chosenProducts().isEmpty()) any.add(root.get("id").in(chosenProducts()));
+            return cb.or(any.toArray(Predicate[]::new));
         }
     }
 }

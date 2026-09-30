@@ -69,10 +69,13 @@ class OfferScopeTests {
     Map<String,Object> scope(String mode) {
         return switch(mode) {
             case "ALL" -> Map.of("scopeType","ALL");
-            case "CATEGORY" -> Map.of("scopeType","CATALOG","categoryIds",List.of(c1.getId()));
-            case "BRAND" -> Map.of("scopeType","CATALOG","brandIds",List.of(b1.getId()));
-            case "BOTH" -> Map.of("scopeType","CATALOG","categoryIds",List.of(c1.getId()),"brandIds",List.of(b1.getId()));
-            case "MULTIPLE" -> Map.of("scopeType","CATALOG","categoryIds",List.of(c1.getId(),c2.getId()),"brandIds",List.of(b1.getId(),b2.getId()));
+            case "CATEGORY" -> Map.of("scopeType","CATEGORY","categoryIds",List.of(c1.getId()));
+            case "BRAND" -> Map.of("scopeType","BRAND","brandIds",List.of(b1.getId()));
+            case "CATEGORY_AND_PRODUCT" -> Map.of("scopeType","CATEGORY","categoryIds",List.of(c1.getId()),"productIds",List.of(p3.getId()));
+            case "BRAND_AND_PRODUCT" -> Map.of("scopeType","BRAND","brandIds",List.of(b1.getId()),"productIds",List.of(p2.getId()));
+            case "PICKED_IN_CATEGORY" -> Map.of("scopeType","CATEGORY","productIds",List.of(p1.getId()));
+            case "PICKED_IN_BRAND" -> Map.of("scopeType","BRAND","productIds",List.of(p3.getId()));
+            case "MULTIPLE" -> Map.of("scopeType","CATEGORY","categoryIds",List.of(c1.getId(),c2.getId()));
             case "INACTIVE" -> Map.of("scopeType","PRODUCT","productIds",List.of(inactive.getId()));
             default -> Map.of("scopeType","PRODUCT","productIds",List.of(p1.getId(),p2.getId()));
         };
@@ -87,7 +90,7 @@ class OfferScopeTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings={"ALL","CATEGORY","BRAND","BOTH","MULTIPLE","PRODUCT","INACTIVE"})
+    @ValueSource(strings={"ALL","CATEGORY","BRAND","CATEGORY_AND_PRODUCT","BRAND_AND_PRODUCT","PICKED_IN_CATEGORY","PICKED_IN_BRAND","MULTIPLE","PRODUCT","INACTIVE"})
     void allPathsUseTheSameScope(String mode) throws Exception {
         var input = new HashMap<>(scope(mode));
         input.putAll(Map.of("name",key,"discountRate",10,"startDate",Instant.now().minusSeconds(60).toString(),"endDate",Instant.now().plusSeconds(600).toString()));
@@ -97,10 +100,11 @@ class OfferScopeTests {
         em.flush(); em.clear();
         var offer=promotions.findById(id).orElseThrow();
         List<Long> expected=switch(mode) {
-            case "ALL","MULTIPLE" -> List.of(p1.getId(),p2.getId(),p3.getId());
+            case "ALL","MULTIPLE","CATEGORY_AND_PRODUCT","BRAND_AND_PRODUCT" -> List.of(p1.getId(),p2.getId(),p3.getId());
             case "CATEGORY","PRODUCT" -> List.of(p1.getId(),p2.getId());
             case "BRAND" -> List.of(p1.getId(),p3.getId());
-            case "BOTH" -> List.of(p1.getId());
+            case "PICKED_IN_CATEGORY" -> List.of(p1.getId());
+            case "PICKED_IN_BRAND" -> List.of(p3.getId());
             default -> List.of();
         };
         var fixture=products.findAllById(List.of(p1.getId(),p2.getId(),p3.getId(),inactive.getId()));
@@ -136,15 +140,20 @@ class OfferScopeTests {
         else quote.andExpect(status().isOk()).andExpect(jsonPath("$.discountAmount").value(eligible*90000.0));
     }
 
+    void preview(String kind,String body,boolean valid) throws Exception {
+        mvc.perform(post("/api/v1/admin/offers/preview").param("kind",kind).with(user(email).roles("ADMIN")).with(csrf()).contentType("application/json").content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.valid").value(valid));
+    }
+
     @Test
-    void invalidBrandCombinationAndMalformedIdsAreRejected() throws Exception {
-        var unrelated=brand("Unassigned");
-        for(var input:List.of(Map.of("scopeType","CATALOG"),Map.of("scopeType","CATALOG","categoryIds",List.of(c1.getId()),"brandIds",List.of(unrelated.getId())))) {
-            mvc.perform(post("/api/v1/admin/offers/preview").param("kind","voucher").with(user(email).roles("ADMIN")).with(csrf()).contentType("application/json").content(json.writeValueAsString(input)))
-                    .andExpect(status().isOk()).andExpect(jsonPath("$.valid").value(false));
+    void emptyMixedAndMalformedScopesAreRejected() throws Exception {
+        for(var input:List.of(Map.of("scopeType","CATEGORY"),Map.of("scopeType","BRAND"),Map.of("scopeType","PRODUCT"),Map.of("scopeType","CATALOG"),
+                Map.<String,Object>of("categoryIds",List.of(c1.getId()),"brandIds",List.of(b1.getId())))) {
+            preview("voucher",json.writeValueAsString(input),false);
         }
-        mvc.perform(post("/api/v1/admin/offers/preview").param("kind","promotion").with(user(email).roles("ADMIN")).with(csrf()).contentType("application/json")
-                .content("{\"scopeType\":\"PRODUCT\",\"productIds\":[1.5]}")).andExpect(jsonPath("$.valid").value(false));
+        preview("promotion","{\"scopeType\":\"PRODUCT\",\"productIds\":[1.5]}",false);
+        // The retired CATALOG type still reads as the one group it lists.
+        preview("voucher",json.writeValueAsString(Map.of("scopeType","CATALOG","brandIds",List.of(b1.getId()))),true);
         var customerRole=roles.findByName("USER");
         if(customerRole==null) { customerRole=new Role(); customerRole.setName("USER"); customerRole=roles.save(customerRole); }
         var customer=new User(); customer.setEmail(key+"customer@test.local"); customer.setEnabled(true); customer.setRole(customerRole); users.saveAndFlush(customer);
@@ -152,10 +161,62 @@ class OfferScopeTests {
     }
 
     @Test
+    void productsAlreadyCoveredByAWholeGroupAreDroppedAndPickedOnesStay() throws Exception {
+        long id=create("promotions",Map.of("name",key,"discountRate",10,"scopeType","CATEGORY","categoryIds",List.of(c1.getId()),"productIds",List.of(p1.getId(),p3.getId()),
+                "startDate",Instant.now().minusSeconds(60).toString(),"endDate",Instant.now().plusSeconds(600).toString()));
+        var saved=getJson("/api/v1/admin/promotions/"+id);
+        assertThat(saved.path("scopeType").asText()).isEqualTo("CATEGORY");
+        assertThat(saved.path("categoryIds")).extracting(JsonNode::asLong).containsExactly(c1.getId());
+        assertThat(saved.path("productIds")).extracting(JsonNode::asLong).containsExactly(p3.getId());
+        assertThat(saved.path("scopeDescription").asText()).contains(c1.getName()).contains(p3.getName());
+    }
+
+    @Test
+    void pickersShowPicturesCountsAndProductsOfOneGroup() throws Exception {
+        var groups=getJson("/api/v1/admin/options/categories?search="+key).path("content");
+        assertThat(groups).hasSize(2);
+        for(var row:groups) assertThat(row.path("productCount").asLong()).isEqualTo(row.path("id").asLong()==c1.getId()?2:1);
+        var brandRows=getJson("/api/v1/admin/options/brands?search="+key).path("content");
+        for(var row:brandRows) assertThat(row.path("productCount").asLong()).isEqualTo(row.path("id").asLong()==b1.getId()?2:1);
+        assertThat(getJson("/api/v1/admin/options/products?search="+key+"&categoryId="+c1.getId()).path("content")).extracting(row->row.path("id").asLong())
+                .containsExactlyInAnyOrder(p1.getId(),p2.getId());
+        var byBrand=getJson("/api/v1/admin/options/products?search="+key+"&brandId="+b1.getId()).path("content");
+        assertThat(byBrand).extracting(row->row.path("id").asLong()).containsExactlyInAnyOrder(p1.getId(),p3.getId());
+        for(var row:byBrand) assertThat(row.path("brandId").asLong()).isEqualTo(b1.getId());
+    }
+
+    @Test
+    void voucherCategoryFilterAlsoFindsVouchersForSingleProductsOfThatCategory() throws Exception {
+        String code=key.substring(0,8).toUpperCase(Locale.ROOT);
+        create("vouchers",Map.of("code",code+"-WHOLE","discount",10,"scopeType","CATEGORY","categoryIds",List.of(c1.getId())));
+        create("vouchers",Map.of("code",code+"-PICKED","discount",10,"scopeType","CATEGORY","productIds",List.of(p1.getId())));
+        create("vouchers",Map.of("code",code+"-BRANDPICK","discount",10,"scopeType","BRAND","productIds",List.of(p2.getId())));
+        create("vouchers",Map.of("code",code+"-OTHER","discount",10,"scopeType","PRODUCT","productIds",List.of(p3.getId())));
+        create("vouchers",Map.of("code",code+"-ALL","discount",10,"scopeType","ALL"));
+        em.flush();
+        var rows=getJson("/api/v1/admin/vouchers?size=50&search="+code+"&categoryId="+c1.getId()).path("content");
+        assertThat(rows).extracting(row->row.path("code").asText())
+                .containsExactlyInAnyOrder(code+"-WHOLE",code+"-PICKED",code+"-BRANDPICK",code+"-ALL");
+    }
+
+    @Test
+    void runningPromotionSetsTheSaleTagOnProducts() throws Exception {
+        create("promotions",Map.of("name","Tag "+key,"discountRate",15,"scopeType","PRODUCT","productIds",List.of(p1.getId()),
+                "startDate",Instant.now().minusSeconds(60).toString(),"endDate",Instant.now().plusSeconds(600).toString()));
+        var tagged=getJson("/api/v1/products/"+p1.getId()).path("product");
+        assertThat(tagged.path("discountRate").asDouble()).isEqualTo(15);
+        assertThat(tagged.path("promotionName").asText()).isEqualTo("Tag "+key);
+        assertThat(tagged.path("promotionEndsAt").isNull()).isFalse();
+        var plain=getJson("/api/v1/products/"+p2.getId()).path("product");
+        assertThat(plain.path("discountRate").asDouble()).isZero();
+        assertThat(plain.path("promotionName").isNull()).isTrue();
+    }
+
+    @Test
     void deletionNamesBlockingOffersAndAssignedCategories() throws Exception {
         var empty=category("Empty");
-        create("vouchers",Map.of("code","TECH-"+key,"discount",10,"scopeType","CATALOG","categoryIds",List.of(empty.getId())));
-        create("promotions",Map.of("name","Sale "+key,"discountRate",10,"scopeType","CATALOG","categoryIds",List.of(empty.getId()),"startDate",Instant.now().toString(),"endDate",Instant.now().plusSeconds(600).toString()));
+        create("vouchers",Map.of("code","TECH-"+key,"discount",10,"scopeType","CATEGORY","categoryIds",List.of(empty.getId())));
+        create("promotions",Map.of("name","Sale "+key,"discountRate",10,"scopeType","CATEGORY","categoryIds",List.of(empty.getId()),"startDate",Instant.now().toString(),"endDate",Instant.now().plusSeconds(600).toString()));
         mvc.perform(delete("/api/v1/admin/categories/"+empty.getId()).with(user(email).roles("ADMIN")).with(csrf())).andExpect(status().isBadRequest())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("TECH-"+key.toUpperCase())))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Sale "+key)));
@@ -181,7 +242,7 @@ class OfferScopeTests {
         var day=java.time.LocalDate.of(2024,2,10);
         Date now=Date.from(day.atStartOfDay(zone).plusHours(12).toInstant()), earlier=Date.from(day.minusDays(10).atStartOfDay(zone).toInstant());
         for(int i=0;i<4;i++) {
-            var o=new Order(); o.setStatus(i==3?"CANCELLED":"COMPLETED"); o.setTotalPrice(100+i); orders.saveAndFlush(o);
+            var o=new Order(); o.setStatus(i==3?OrderStatus.CANCELLED:OrderStatus.COMPLETED); o.setTotalPrice(100+i); orders.saveAndFlush(o);
             o.setCreatedAt(i==0?earlier:now); o.setCompletedAt(i==0?now:i==1?earlier:null);
         }
         em.flush();

@@ -41,11 +41,13 @@ public class Order {
     public String getNote() { return note; }
     public void setNote(String value) { note = value; }
 
-    private String status;
+    @Enumerated(EnumType.STRING) @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
+    private OrderStatus status;
 
     private String paymentMethod;
 
-    private String paymentStatus;
+    @Enumerated(EnumType.STRING) @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
+    private PaymentStatus paymentStatus;
 
     @Column(length = 64)
     private String paymentReference;
@@ -107,11 +109,11 @@ public class Order {
         this.receiverPhone = receiverPhone;
     }
 
-    public String getStatus() {
+    public OrderStatus getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(OrderStatus status) {
         this.status = status;
     }
 
@@ -123,11 +125,11 @@ public class Order {
         this.paymentMethod = paymentMethod;
     }
 
-    public String getPaymentStatus() {
+    public PaymentStatus getPaymentStatus() {
         return paymentStatus;
     }
 
-    public void setPaymentStatus(String paymentStatus) {
+    public void setPaymentStatus(PaymentStatus paymentStatus) {
         this.paymentStatus = paymentStatus;
     }
 
@@ -140,7 +142,7 @@ public class Order {
     }
 
     public boolean isRefundRequired() {
-        return "REFUND_REQUIRED".equals(paymentStatus);
+        return paymentStatus == PaymentStatus.REFUND_REQUIRED;
     }
 
     public Date getCreatedAt() {

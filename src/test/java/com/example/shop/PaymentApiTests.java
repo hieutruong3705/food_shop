@@ -33,10 +33,10 @@ class PaymentApiTests {
         assertThat(payments.ipn(Map.of("vnp_TxnRef",Long.toString(orderId))).get("RspCode")).isEqualTo("97");
         assertThat(payments.ipn(callback("00",1)).get("RspCode")).isEqualTo("04");
         var signed=callback("00",200000000);assertThat(payments.ipn(signed).get("RspCode")).isEqualTo("00");assertThat(payments.ipn(signed).get("RspCode")).isEqualTo("02");
-        assertThat(orders.findById(orderId).orElseThrow().getPaymentStatus()).isEqualTo("PAID");assertThat(products.findById(product.getId()).orElseThrow().getQuantity()).isEqualTo(1);
+        assertThat(orders.findById(orderId).orElseThrow().getPaymentStatus()).isEqualTo(PaymentStatus.PAID);assertThat(products.findById(product.getId()).orElseThrow().getQuantity()).isEqualTo(1);
     }
     @Test void failedPaymentRestoresStockOnlyOnce()throws Exception{
-        var signed=callback("24",200000000);assertThat(payments.ipn(signed).get("RspCode")).isEqualTo("00");assertThat(payments.ipn(signed).get("RspCode")).isEqualTo("02");assertThat(products.findById(product.getId()).orElseThrow().getQuantity()).isEqualTo(2);assertThat(orders.findById(orderId).orElseThrow().getStatus()).isEqualTo("CANCELLED");
+        var signed=callback("24",200000000);assertThat(payments.ipn(signed).get("RspCode")).isEqualTo("00");assertThat(payments.ipn(signed).get("RspCode")).isEqualTo("02");assertThat(products.findById(product.getId()).orElseThrow().getQuantity()).isEqualTo(2);assertThat(orders.findById(orderId).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
     @Test void paymentLinkUsesSandboxAndUnpaidOrdersCannotShip(){
         var order=orders.findById(orderId).orElseThrow();assertThat(payments.paymentUrl(order,"127.0.0.1")).startsWith("https://sandbox.vnpayment.vn/").contains("vnp_SecureHash=");
@@ -48,13 +48,13 @@ class PaymentApiTests {
     @Test void lateIpnAfterExpiryRequestsRefundWithoutReopeningTheOrder()throws Exception{
         age(orderId,25);payments.expire(orderId);
         var expired=orders.findById(orderId).orElseThrow();
-        assertThat(expired.getStatus()).isEqualTo("CANCELLED");assertThat(expired.getPaymentStatus()).isEqualTo("EXPIRED");
+        assertThat(expired.getStatus()).isEqualTo(OrderStatus.CANCELLED);assertThat(expired.getPaymentStatus()).isEqualTo(PaymentStatus.EXPIRED);
         long stockAfterExpiry=stock();assertThat(stockAfterExpiry).isEqualTo(2);
 
         var late=callback("00",200000000,Map.of("vnp_TransactionNo","14567890"));
         assertThat(payments.ipn(late).get("RspCode")).isEqualTo("00");
         var refund=orders.findById(orderId).orElseThrow();
-        assertThat(refund.getPaymentStatus()).isEqualTo("REFUND_REQUIRED");assertThat(refund.getStatus()).isEqualTo("CANCELLED");
+        assertThat(refund.getPaymentStatus()).isEqualTo(PaymentStatus.REFUND_REQUIRED);assertThat(refund.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(refund.getPaymentReference()).isEqualTo("14567890");
         assertThat(stock()).isEqualTo(stockAfterExpiry);
         assertThat(OrderTransitions.allowed(refund)).isEmpty();
@@ -66,20 +66,20 @@ class PaymentApiTests {
         assertThat(payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","111"))).get("RspCode")).isEqualTo("00");
         assertThat(payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","222"))).get("RspCode")).isEqualTo("02");
         var order=orders.findById(orderId).orElseThrow();
-        assertThat(order.getPaymentStatus()).isEqualTo("REFUND_REQUIRED");assertThat(order.getPaymentReference()).isEqualTo("111");
-        assertThat(order.getStatus()).isEqualTo("CANCELLED");assertThat(stock()).isEqualTo(2);
+        assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.REFUND_REQUIRED);assertThat(order.getPaymentReference()).isEqualTo("111");
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);assertThat(stock()).isEqualTo(2);
     }
     @Test void lateFailureIpnAfterExpiryIsIgnoredBecauseNoMoneyMoved()throws Exception{
         age(orderId,25);payments.expire(orderId);
         assertThat(payments.ipn(callback("24",200000000)).get("RspCode")).isEqualTo("02");
         var order=orders.findById(orderId).orElseThrow();
-        assertThat(order.getPaymentStatus()).isEqualTo("EXPIRED");assertThat(order.getPaymentReference()).isNull();assertThat(stock()).isEqualTo(2);
+        assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.EXPIRED);assertThat(order.getPaymentReference()).isNull();assertThat(stock()).isEqualTo(2);
     }
     @Test void paymentAfterCustomerCancellationAlsoRequiresRefund()throws Exception{
         commerce.status(buyer.getEmail(),orderId,"CANCELLED",false);
         assertThat(payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","333"))).get("RspCode")).isEqualTo("00");
         var order=orders.findById(orderId).orElseThrow();
-        assertThat(order.getStatus()).isEqualTo("CANCELLED");assertThat(order.getPaymentStatus()).isEqualTo("REFUND_REQUIRED");assertThat(stock()).isEqualTo(2);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.REFUND_REQUIRED);assertThat(stock()).isEqualTo(2);
     }
     @Test void refundRequiredOrdersCannotBeArchivedOutOfTheAdminQueue()throws Exception{
         age(orderId,25);payments.expire(orderId);payments.ipn(callback("00",200000000));
@@ -88,6 +88,6 @@ class PaymentApiTests {
     @Test void ordinaryPaymentStoresTheVnpayTransactionNumber()throws Exception{
         assertThat(payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","999"))).get("RspCode")).isEqualTo("00");
         var order=orders.findById(orderId).orElseThrow();
-        assertThat(order.getPaymentStatus()).isEqualTo("PAID");assertThat(order.getPaymentReference()).isEqualTo("999");
+        assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);assertThat(order.getPaymentReference()).isEqualTo("999");
     }
 }
