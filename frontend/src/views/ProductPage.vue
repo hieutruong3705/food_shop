@@ -1,10 +1,11 @@
 <script setup>
-import { ref, watch, computed, nextTick } from "vue";
+import { ref, watch, computed, nextTick, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "../services/api";
 import { useAuth } from "../stores/auth";
 import { money, imageUrl, imageError, useTask, date, discountPercent, rateText } from "../lib/shop";
 import { rememberProduct } from "../lib/recent";
+import { sanitizeHtml, looksLikeHtml } from "../lib/richtext";
 import TaskState from "../components/TaskState.vue";
 import ProductCard from "../components/ProductCard.vue";
 const route = useRoute(),
@@ -30,7 +31,9 @@ const optionGroups = computed(() => {
     name,
     values: [...new Set(variants.map(v => v.options[name]).filter(Boolean))].map(value => {
       const candidates = variants.filter(v => v.options[name] === value && names.slice(0, index).every(key => !selectedOptions.value[key] || v.options[key] === selectedOptions.value[key]));
-      return { value, available: candidates.some(v => v.quantity > 0), image: candidates.find(v => v.quantity > 0)?.imageUrl || candidates[0]?.imageUrl || detail.value.images[0] };
+      return { value, available: candidates.some(v => v.quantity > 0), // Chỉ dùng ảnh riêng của phiên bản; không mượn ảnh chính của sản phẩm,
+      // vì khi đó mọi màu sẽ hiện cùng một tấm ảnh.
+      image: candidates.find(v => v.quantity > 0)?.imageUrl || candidates[0]?.imageUrl || '' };
     }),
   }));
 });
@@ -72,7 +75,7 @@ watch(
     }),
   { immediate: true },
 );
-// A visitor who presses "Thêm vào giỏ hàng" is taken to log in and the choice is added when they come back.
+// A visitor who presses a buy button is taken to log in and the choice is replayed when they come back.
 const PENDING = "techshop.pendingCart";
 function readPending() {
   try { return JSON.parse(sessionStorage.getItem(PENDING) || "null"); } catch { return null; }
@@ -83,26 +86,41 @@ function resumePending() {
   try { sessionStorage.removeItem(PENDING); } catch { /* nothing to clean */ }
   selectedOptions.value = pending.options || {};
   quantity.value = pending.quantity || 1;
-  nextTick(add);
+  nextTick(pending.checkout ? buyNow : add);
 }
 watch([() => auth.user, detail], resumePending);
+function sendToLogin(checkout) {
+  try {
+    sessionStorage.setItem(PENDING, JSON.stringify({ productId: detail.value.product.id, quantity: quantity.value, options: selectedOptions.value, checkout }));
+  } catch { /* the shopper can press the button again after logging in */ }
+  return router.push({ path: "/login", query: { redirect: route.fullPath } });
+}
+function addItem() {
+  return api("/cart/items", {
+    method: "POST",
+    body: JSON.stringify({
+      productId: detail.value.product.id,
+      quantity: quantity.value,
+      variantId: variantId.value,
+    }),
+  });
+}
 function add() {
-  if (!auth.user) {
-    try {
-      sessionStorage.setItem(PENDING, JSON.stringify({ productId: detail.value.product.id, quantity: quantity.value, options: selectedOptions.value }));
-    } catch { /* the shopper can add again after logging in */ }
-    return router.push({ path: "/login", query: { redirect: route.fullPath } });
-  }
+  if (!auth.user) return sendToLogin(false);
   run(async () => {
-    await api("/cart/items", {
-      method: "POST",
-      body: JSON.stringify({
-        productId: detail.value.product.id,
-        quantity: quantity.value,
-        variantId: variantId.value,
-      }),
-    });
+    await addItem();
     message.value = "Đã thêm sản phẩm vào giỏ hàng.";
+  });
+}
+// Checkout works off cart lines, so buying now adds the line and hands checkout that one id.
+function buyNow() {
+  if (!auth.user) return sendToLogin(true);
+  run(async () => {
+    const cart = await addItem();
+    const line = cart.items.find(
+      (i) => i.productId === detail.value.product.id && (i.variantId ?? null) === variantId.value,
+    );
+    router.push({ path: "/checkout", query: line ? { items: String(line.id) } : {} });
   });
 }
 function submitReview() {
@@ -131,6 +149,39 @@ function removeReview(r) {
     message.value = "Đã xóa đánh giá.";
   });
 }
+// Lướt ảnh bằng mũi tên hai bên; danh sách quay vòng nên bấm ở ảnh cuối sẽ về ảnh đầu.
+const imageIndex = computed(() => Math.max(0, (detail.value?.images || []).indexOf(selected.value)));
+function stepImage(step) {
+  const images = detail.value?.images || [];
+  if (images.length < 2) return;
+  selected.value = images[(imageIndex.value + step + images.length) % images.length];
+}
+function galleryKeys(event) {
+  if (!detail.value || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
+  if (document.activeElement?.closest('input,textarea,select')) return;
+  stepImage(event.key === 'ArrowLeft' ? -1 : 1);
+}
+onMounted(() => document.addEventListener('keydown', galleryKeys));
+onUnmounted(() => document.removeEventListener('keydown', galleryKeys));
+// Mô tả dài được thu gọn sẵn; chỉ hiện nút "Xem thêm" khi nội dung thực sự vượt chiều cao giới hạn.
+const DESC_LIMIT = 320;
+const descBox = ref(null), descCollapsed = ref(true), descOverflow = ref(false);
+async function measureDescription() {
+  descCollapsed.value = true;
+  descOverflow.value = false;
+  await nextTick();
+  const box = descBox.value;
+  if (!box) return;
+  // đo khi chưa thu gọn để biết chiều cao thật
+  box.classList.remove('collapsed');
+  const full = box.scrollHeight;
+  descOverflow.value = full > DESC_LIMIT + 40;
+}
+watch(() => detail.value?.detailDescription, measureDescription, { flush: 'post' });
+const richDescription = computed(() => {
+  const raw = detail.value?.detailDescription;
+  return looksLikeHtml(raw) ? sanitizeHtml(raw) : "";
+});
 async function loadReviews(){
   [reviews.value,reviewSummary.value]=await Promise.all([api(`/products/${route.params.id}/reviews`),api(`/products/${route.params.id}/reviews/summary`)]);
 }
@@ -138,7 +189,7 @@ async function loadReviews(){
 <template>
   <TaskState :busy="busy" :error="error" :message="message" /><template
     v-if="detail"
-    ><div class="breadcrumb">
+    ><div class="product-detail-page"><div class="breadcrumb">
       <RouterLink to="/products">Sản phẩm</RouterLink> /
       <template v-if="detail.categoryId && detail.product.category"
         ><RouterLink :to="{ path: '/products', query: { categoryId: detail.categoryId } }">{{ detail.product.category }}</RouterLink> /
@@ -146,6 +197,10 @@ async function loadReviews(){
       {{ detail.product.name }}
     </div>
     <section class="detail-grid">
+      <header class="detail-heading">
+        <span class="eyebrow">{{ detail.product.brand }} / {{ detail.product.category }}</span>
+        <h1>{{ detail.product.name }}</h1>
+      </header>
       <div>
         <div class="detail-image">
           <img
@@ -153,6 +208,11 @@ async function loadReviews(){
             :alt="detail.product.name"
             @error="imageError"
           />
+          <template v-if="detail.images.length > 1">
+            <button type="button" class="gallery-arrow previous" aria-label="Ảnh trước" @click="stepImage(-1)">‹</button>
+            <button type="button" class="gallery-arrow next" aria-label="Ảnh tiếp theo" @click="stepImage(1)">›</button>
+            <small class="gallery-count">{{ imageIndex + 1 }} / {{ detail.images.length }}</small>
+          </template>
         </div>
         <div class="thumbnails">
           <button
@@ -169,10 +229,6 @@ async function loadReviews(){
         </div>
       </div>
       <div class="detail-copy">
-        <span class="eyebrow"
-          >{{ detail.product.brand }} / {{ detail.product.category }}</span
-        >
-        <h1>{{ detail.product.name }}</h1>
         <p>{{ detail.product.shortDescription }}</p>
         <div class="price">
           <small v-if="detail.hasVariants && !variant">Từ </small>{{ money(displayedPrice) }}
@@ -198,7 +254,7 @@ async function loadReviews(){
             <div class="option-values">
               <label v-for="option in group.values" :key="option.value" class="option-chip" :class="{ chosen: selectedOptions[group.name] === option.value, unavailable: !option.available }">
                 <input type="radio" :name="'option-' + group.name" :value="option.value" :checked="selectedOptions[group.name] === option.value" :disabled="!option.available || busy" :aria-label="group.name + ': ' + option.value" @change="chooseOption(group.name, option.value)" />
-                <img v-if="isColor(group.name)" :src="imageUrl(option.image)" alt="" @error="imageError" />
+                <img v-if="isColor(group.name) && option.image" :src="imageUrl(option.image)" alt="" @error="imageError" />
                 <span>{{ option.value }}<small v-if="!option.available">Không có sẵn</small></span>
                 <span v-if="selectedOptions[group.name] === option.value" class="option-check" aria-hidden="true">✓</span>
               </label>
@@ -213,22 +269,29 @@ async function loadReviews(){
             min="1"
             :max="Math.min(availableStock, 100)"
             aria-label="Số lượng"
-          /><button :disabled="busy || !availableStock" @click="add">
+          /><button class="buy-secondary" :disabled="busy || !availableStock" @click="add">
             Thêm vào giỏ hàng ↗
           </button>
+          <button :disabled="busy || !availableStock" @click="buyNow">Mua ngay →</button>
         </div>
         <RouterLink to="/cart">Xem giỏ hàng →</RouterLink>
         <div class="detail-meta">
           <p>SKU: {{ variant?.sku || detail.sku || "Đang cập nhật" }}</p>
           <p>Bảo hành: {{ detail.warrantyMonths ?? "—" }} tháng</p>
-          <p>Miễn phí vận chuyển đơn từ 1.000.000₫</p>
+          <p>Miễn phí vận chuyển toàn quốc</p>
         </div>
       </div>
     </section>
-    <div class="two-column section">
+    <div class="two-column section detail-columns">
       <article class="panel">
         <h2>Thông tin sản phẩm</h2>
-        <p class="prewrap">{{ detail.detailDescription }}</p>
+        <div ref="descBox" class="product-desc" :class="{ collapsed: descCollapsed && descOverflow }">
+          <div v-if="richDescription" class="product-rich" v-html="richDescription"></div>
+          <p v-else class="prewrap">{{ detail.detailDescription }}</p>
+        </div>
+        <button v-if="descOverflow" type="button" class="desc-toggle" :aria-expanded="!descCollapsed"
+          @click="descCollapsed = !descCollapsed">{{ descCollapsed ? 'Xem thêm' : 'Thu gọn' }}
+          <span aria-hidden="true">{{ descCollapsed ? '▾' : '▴' }}</span></button>
       </article>
       <article v-if="detail.specifications.length" class="panel">
         <h2>Thông số kỹ thuật</h2>
@@ -240,6 +303,12 @@ async function loadReviews(){
         </dl>
       </article>
     </div>
+    <section v-if="related.length" class="section">
+      <h2>Có thể bạn cũng thích</h2>
+      <div class="product-grid">
+        <ProductCard v-for="p in related" :key="p.id" :product="p" />
+      </div>
+    </section>
     <section class="panel section">
       <h2>Đánh giá khách hàng</h2>
       <p v-if="reviewSummary.count" class="review-summary" aria-label="Tổng hợp đánh giá"><strong>{{ Number(reviewSummary.average).toFixed(1) }}/5 ★</strong> · {{ reviewSummary.count }} đánh giá</p>
@@ -268,10 +337,6 @@ async function loadReviews(){
       </form>
       <RouterLink v-if="!auth.user" to="/login">Đăng nhập để đánh giá</RouterLink>
     </section>
-    <section class="section">
-      <h2>Có thể bạn quan tâm</h2>
-      <div class="product-grid">
-        <ProductCard v-for="p in related" :key="p.id" :product="p" />
-      </div></section
-  ></template>
+    </div>
+  </template>
 </template>

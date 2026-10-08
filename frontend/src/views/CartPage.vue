@@ -5,6 +5,7 @@ import { money, imageUrl, imageError, useTask, rateText } from "../lib/shop";
 import TaskState from "../components/TaskState.vue";
 const cart = ref(null),
   selected = ref([]),
+  updating = ref([]),
   { busy, error, run } = useTask();
 onMounted(() =>
   run(async () => {
@@ -20,15 +21,30 @@ watch(cart, () => { selected.value = selected.value.filter(id => cart.value?.ite
 const total = computed(() =>
   selectedItems.value.reduce((sum, i) => sum + i.price * i.quantity, 0),
 );
-function update(item, event) {
-  const q = Number(event.target.value);
-  run(async () => {
-    try { cart.value = await api(`/cart/items/${item.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ quantity: q }),
-      }); }
-    finally { event.target.value = cart.value?.items.find(i => i.id === item.id)?.quantity ?? item.quantity; }
-  });
+function lineBusy(item) {
+  return updating.value.includes(item.id);
+}
+function clampQuantity(item, quantity) {
+  return Math.max(1, Math.min(Math.min(item.stock, 100), Number(quantity) || 1));
+}
+async function updateQuantity(item, quantity) {
+  const q = clampQuantity(item, quantity);
+  if (lineBusy(item) || q === item.quantity) return;
+  const previous = item.quantity;
+  item.quantity = q;
+  updating.value = [...updating.value, item.id];
+  error.value = "";
+  try {
+    cart.value = await api(`/cart/items/${item.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ quantity: q }),
+    });
+  } catch (e) {
+    item.quantity = previous;
+    error.value = e.message;
+  } finally {
+    updating.value = updating.value.filter((id) => id !== item.id);
+  }
 }
 function remove(item) {
   run(
@@ -72,15 +88,33 @@ function remove(item) {
             >{{ !item.active ? 'Sản phẩm hoặc phiên bản đã ngừng bán.' : item.stock === 0 ? 'Sản phẩm đã hết hàng.' : 'Số lượng vượt tồn kho; hãy giảm số lượng để tiếp tục.' }}</small
           >
         </div>
+        <button
+          type="button"
+          class="quantity-button"
+          :disabled="busy || lineBusy(item) || !item.active || item.stock < 1 || item.quantity <= 1"
+          :aria-label="`Decrease quantity for ${item.name}`"
+          @click="updateQuantity(item, item.quantity - 1)"
+        >
+          -
+        </button>
         <input
           type="number"
           :value="item.quantity"
           min="1"
           :max="Math.min(item.stock, 100)"
-          :disabled="busy || !item.active || item.stock < 1"
+          :disabled="busy || lineBusy(item) || !item.active || item.stock < 1"
           :aria-label="`Số lượng ${item.name}`"
-          @change="update(item, $event)"
-        /><button class="text-button" :disabled="busy" @click="remove(item)">
+          @change="updateQuantity(item, $event.target.value)"
+          @keydown.enter.prevent="$event.target.blur()"
+        /><button
+          type="button"
+          class="quantity-button"
+          :disabled="busy || lineBusy(item) || !item.active || item.stock < 1 || item.quantity >= Math.min(item.stock, 100)"
+          :aria-label="`Increase quantity for ${item.name}`"
+          @click="updateQuantity(item, item.quantity + 1)"
+        >
+          +
+        </button><button type="button" class="text-button" :disabled="busy || lineBusy(item)" @click="remove(item)">
           Xóa
         </button>
       </article>

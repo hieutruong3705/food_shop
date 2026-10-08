@@ -57,11 +57,12 @@ export const resources = {
       ["name", "Tên banner"],
       ["imageUrl", "Đường dẫn ảnh"],
       ["link", "Liên kết"],
+      ["placement", "Vị trí", "bannerPlacement"],
       ["technologyCatalog", "Hiển thị trong cửa hàng công nghệ", "checkbox"],
       ["active", "Hiển thị", "checkbox"],
     ],
     sections: [
-      { title: "Thông tin", keys: ["name", "link"], wide: true },
+      { title: "Thông tin", keys: ["name", "link", "placement"], wide: true },
       { title: "Ảnh banner", hint: "Ảnh ngang, hiển thị ở trang chủ.", keys: ["imageUrl"], media: true, wide: true },
       { title: "Hiển thị", keys: ["technologyCatalog", "active"], wide: true },
     ],

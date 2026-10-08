@@ -114,6 +114,7 @@ function edit(row) {
       }
     }
     if (isOffer.value && !row) form.value[type.value === 'vouchers' ? 'discount' : 'discountRate'] = 10;
+    if (type.value === 'banners' && !form.value.placement) form.value.placement = 'HOME_HERO';
     if (type.value === 'promotions' && !row) {
       const now = new Date(), local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
       form.value.startDate = local(now);
@@ -207,6 +208,7 @@ function showOrder(row) {
   run(async () => (selected.value = await api(`/admin/orders/${row.id}`)));
 }
 const actionLabels={CONFIRMED:'Xác nhận',SHIPPING:'Chuyển sang đang giao',COMPLETED:'Hoàn thành',CANCELLED:'Hủy'};
+const bannerPlacements={HOME_HERO:'Banner chính',VOUCHER_PAGE:'Trang mã giảm giá',HOME_BANNER_1:'Banner 1',HOME_BANNER_2:'Banner 2',HOME_BANNER_3:'Banner 3',HOME_BRAND_1_1:'Thương hiệu 1.1',HOME_BRAND_1_2:'Thương hiệu 1.2',HOME_BRAND_1_3:'Thương hiệu 1.3',HOME_BRAND_1_4:'Thương hiệu 1.4',HOME_GROUP_1:'Nhóm sản phẩm 1 (2 ô)',HOME_GROUP_2:'Nhóm sản phẩm 2 (1 ô)',HOME_GROUP_3:'Nhóm sản phẩm 3 (2 ô)',HOME_GROUP_4:'Nhóm sản phẩm 4 (1 ô)',HOME_GROUP_5:'Nhóm sản phẩm 5 (2 ô)',HOME_RECENT:'Bạn vừa xem (1 ô)'};
 function transition(status,row=selected.value) {
   if(status==='CANCELLED'&&!window.confirm(`Hủy đơn #${row.id}? Tồn kho sẽ được hoàn lại.`))return;
   run(async () => {
@@ -315,7 +317,7 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
         </button>
       </div>
       <TaskState :busy="busy" :error="error" :message="message" />
-      <form v-if="!type" class="filters" @submit.prevent="run(load)">
+      <form v-if="!type" class="filters report-filter" @submit.prevent="run(load)">
         <label>Từ ngày<input v-model="startDate" type="date" /></label
         ><label>Đến ngày<input v-model="endDate" type="date" /></label
         ><button :disabled="busy">Lọc báo cáo</button>
@@ -466,9 +468,13 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
           <p v-if="!stats.bestSelling.length" class="muted">
             Chưa có dữ liệu bán hàng.
           </p>
-          <p v-for="p in stats.bestSelling" :key="p.productId">
-            {{ p.productName }} · {{ p.quantitySold }} sản phẩm
-          </p>
+          <ul v-else class="best-sellers">
+            <li v-for="p in stats.bestSelling" :key="p.productId">
+              <img :src="imageUrl(p.productImage)" :alt="p.productName" @error="imageError" />
+              <strong>{{ p.productName }}</strong>
+              <span>{{ p.quantitySold }} sản phẩm</span>
+            </li>
+          </ul>
         </div>
         <div class="panel section">
           <h2>Báo cáo đơn hàng</h2>
@@ -512,6 +518,11 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
           >
             <option>USER</option>
             <option>ADMIN</option></select
+          ><select
+            v-else-if="kind === 'bannerPlacement'"
+            v-model="form[key]"
+          >
+            <option v-for="(label, value) in bannerPlacements" :key="value" :value="value">{{ label }}</option></select
           ><select
             v-else-if="
               [
@@ -729,7 +740,7 @@ const transitions = computed(() => selected.value?.allowedStatuses || []);
                 ><template v-else-if="type === 'brands'"
                   >{{ row.productCount }} sản phẩm<small>{{ row.description || 'Chưa có mô tả' }}</small></template
                 ><template v-else-if="type === 'banners'"
-                  >{{ row.active ? 'Đang hiển thị' : 'Ẩn' }}<small>{{ row.link }}</small></template
+                  >{{ row.active ? 'Đang hiển thị' : 'Ẩn' }}<small>{{ bannerPlacements[row.placement] || row.placement }} · {{ row.link }}</small></template
                 ><template v-else>{{
                   row.active === false ? "Ẩn" : "—"
                 }}</template>

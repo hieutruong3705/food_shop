@@ -41,6 +41,10 @@ const router = createRouter({
       component: () => import("../views/PaymentReturnPage.vue"),
     },
     {
+      path: "/vouchers",
+      component: () => import("../views/VoucherPage.vue"),
+    },
+    {
       path: "/forbidden",
       component: () => import("../views/ForbiddenPage.vue"),
     },

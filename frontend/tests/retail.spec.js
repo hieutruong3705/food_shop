@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('retail campaigns, featured category filters and mobile navigation use live catalog', async ({ page }) => {
+test('retail campaigns, featured products and mobile navigation use live catalog', async ({ page }) => {
   await page.goto('/');
   const featured = page.getByTestId('featured-products');
   await expect(featured.locator('.product-card')).toHaveCount(8);
@@ -8,13 +8,7 @@ test('retail campaigns, featured category filters and mobile navigation use live
   await page.goto('/products');
   await expect(page.locator('.product-card').first()).toBeVisible();
   await page.goto('/');
-  const filters = page.locator('.retail-filter-tabs');
-  const categoryButton = filters.getByRole('button').nth(1);
-  const categoryLabel = await categoryButton.textContent();
-  await categoryButton.click();
-  await expect(featured.locator('.product-card').first()).toBeVisible();
-  for (const text of await featured.locator('.product-copy small').allTextContents()) expect(text).toContain(categoryLabel);
-  await filters.getByRole('button', { name: 'Tất cả', exact: true }).click();
+  await expect(page.locator('.retail-filter-tabs')).toHaveCount(0);
   await expect(featured.locator('.product-card')).toHaveCount(8);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Danh mục sản phẩm', exact: true }).click();

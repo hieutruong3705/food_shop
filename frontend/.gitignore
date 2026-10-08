@@ -9,6 +9,8 @@ lerna-debug.log*
 
 node_modules
 dist
+# Windows holds open files under dist/ while VS Code indexes them, so a build renames the old one aside.
+dist-stale-*
 dist-ssr
 *.local
 

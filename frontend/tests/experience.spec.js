@@ -16,25 +16,17 @@ test('database banners slide manually and automatically; offers and mock chat wo
     const productId=await create('products',{name:key,sku:key,slug:key,categoryId:category.id,brandId:brand.id,price:1230000,quantity:2,warrantyMonths:12,images:['/tech/laptop.svg'],active:false,technologyCatalog:false});
     await create('promotions',{name:key,description:'Khuyến mãi cho sản phẩm tạm ngừng bán',discountRate:97,active:true,startDate:new Date(Date.now()-3600000).toISOString(),endDate:new Date(Date.now()+86400000).toISOString(),productIds:[productId],brandIds:[]});
     await page.clock.install();await page.goto('/');const hero=page.getByRole('region',{name:'Banner TechShop'});
-    await expect(hero.getByRole('heading',{name:key+' B',exact:true})).toBeVisible();
+    await expect(hero.getByRole('img',{name:key+' B',exact:true})).toBeVisible();
+    await expect(hero.locator('.banner-caption')).toHaveCount(0);
     await expect(page.getByRole('button',{name:/tạm dừng|bật tự chuyển/i})).toHaveCount(0);
-    await expect(page.locator('.promotion-card')).toContainText('Giảm 97%');
-    await expect(page.locator('.promotion-card')).toContainText('Sản phẩm áp dụng hiện chưa được mở bán.');
-    await expect(page.locator('.promotion-card').getByRole('link',{name:'Xem sản phẩm áp dụng →'})).toHaveCount(0);
-    await expect(page.locator('.voucher-code')).toContainText(key.toUpperCase());
+    // The top bar links to the voucher page with a plain label, like its other entries.
+    const topVoucher=page.locator('.topbar-offer.voucher');
+    await expect(topVoucher).toHaveText('Mã giảm giá');
+    await expect(topVoucher).toHaveAttribute('href','/vouchers');
     await page.mouse.move(0,0);await page.clock.runFor(4600);
-    await expect(hero.getByRole('heading',{name:key+' A',exact:true})).toBeVisible();
+    await expect(hero.getByRole('img',{name:key+' A',exact:true})).toBeVisible();
     await hero.getByRole('button',{name:'Banner trước',exact:true}).click();await page.clock.runFor(400);
-    await expect(hero.getByRole('heading',{name:key+' B',exact:true})).toBeVisible();
-    await expect(page.locator('.voucher-code')).toContainText((key+'-NEXT').toUpperCase());
-    await expect(page.locator('.voucher-card')).toContainText('Giảm 98%');
-    await expect(page.locator('.voucher-card')).toContainText('50.000');
-    await page.getByRole('button',{name:'Mã giảm giá: trước',exact:true}).click();
-    await expect(page.locator('.voucher-code')).toContainText(key.toUpperCase());
-    await expect(page.locator('.voucher-card')).toContainText('100.000');
-    await page.clock.runFor(5000);await expect(page.locator('.voucher-code')).not.toContainText('NEXT');
-    await page.getByRole('button',{name:'Mã giảm giá: tiếp theo',exact:true}).click();
-    await expect(page.locator('.voucher-code')).toContainText('NEXT');
+    await expect(hero.getByRole('img',{name:key+' B',exact:true})).toBeVisible();
     // Keep the UI regression deterministic; real provider transport is tested separately.
     await page.route('**/api/chat/status',route=>route.fulfill({json:{provider:'mock'}}));
     await page.route('**/api/chat',route=>route.fulfill({json:{reply:'Bạn muốn tư vấn thiết bị theo ngân sách nào?',provider:'mock'}}));

@@ -121,34 +121,34 @@ const salePrice = (price) => Math.round(price * (1 - props.rate / 100));
 .scope-picker { display: grid; gap: 14px; margin: 0; }
 .scope-picker h3 { margin: 0; font-size: 16px; }
 .scope-modes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.scope-modes button { display: flex; align-items: flex-start; justify-content: flex-start; gap: 12px; padding: 14px; text-align: left; color: #16352e; background: #fff; border: 1px solid #d7e3df; border-radius: 12px; font-weight: 400; }
-.scope-modes button:hover { border-color: #7fb6a7; }
-.scope-modes button[aria-pressed="true"] { border-color: #00876d; background: #e9f6f0; box-shadow: inset 0 0 0 1px #00876d; }
-.mode-icon { width: 26px; height: 26px; flex-shrink: 0; color: #00755f; }
+.scope-modes button { display: flex; align-items: flex-start; justify-content: flex-start; gap: 12px; padding: 14px; text-align: left; color: #2a5366; background: #fff; border: 1px solid #d7dfe3; border-radius: 12px; font-weight: 400; }
+.scope-modes button:hover { border-color: #7fa5b6; }
+.scope-modes button[aria-pressed="true"] { border-color: #0085c3; background: #e9f2f6; box-shadow: inset 0 0 0 1px #0085c3; }
+.mode-icon { width: 26px; height: 26px; flex-shrink: 0; color: #007bb4; }
 .scope-modes span { display: grid; gap: 4px; }
 .scope-modes strong { font-size: 14px; }
-.scope-modes small { font-size: 12px; color: #60766e; line-height: 1.4; }
-.all-note { margin: 0; padding: 14px 16px; background: #f5f8f7; border-radius: 10px; font-size: 14px; color: #16352e; }
+.scope-modes small { font-size: 12px; color: #606d76; line-height: 1.4; }
+.all-note { margin: 0; padding: 14px 16px; background: #f5f7f8; border-radius: 10px; font-size: 14px; color: #2a5366; }
 .scope-products { display: grid; gap: 12px; }
-.tray { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; background: #f5f8f7; border-radius: 10px; font-size: 13px; }
-.tray-chip { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #bad8ca; border-radius: 999px; padding: 3px 4px 3px 4px; max-width: 100%; }
-.tray-chip img { width: 24px; height: 24px; object-fit: contain; border-radius: 50%; background: #f0f4f2; }
+.tray { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; background: #f5f7f8; border-radius: 10px; font-size: 13px; }
+.tray-chip { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #baced8; border-radius: 999px; padding: 3px 4px 3px 4px; max-width: 100%; }
+.tray-chip img { width: 24px; height: 24px; object-fit: contain; border-radius: 50%; background: #f0f2f4; }
 .tray-name { font-size: 12px; font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tray-chip button { background: transparent; color: #7b8b82; padding: 2px 8px; font-size: 15px; line-height: 1; gap: 0; }
+.tray-chip button { background: transparent; color: #7b848b; padding: 2px 8px; font-size: 15px; line-height: 1; gap: 0; }
 .tray-chip button:hover { color: #b42a26; }
-.scope-preview { border-radius: 12px; background: #f5f8f7; padding: 16px 18px; display: grid; gap: 12px; }
+.scope-preview { border-radius: 12px; background: #f5f7f8; padding: 16px 18px; display: grid; gap: 12px; }
 .scope-preview p { margin: 0; }
 .preview-head { display: grid; gap: 2px; }
 .preview-head small { color: #a5281f; font-size: 12px; font-weight: 600; }
-.muted { color: #60766e; font-size: 13px; }
+.muted { color: #606d76; font-size: 13px; }
 .more { text-align: center; }
 .scope-samples { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .scope-samples article { display: grid; gap: 8px; font-size: 13px; background: #fff; border-radius: 10px; padding: 8px; min-width: 0; }
-.frame { position: relative; display: block; background: #f4f7f6; border-radius: 8px; height: 90px; }
+.frame { position: relative; display: block; background: #f4f6f7; border-radius: 8px; height: 90px; }
 .frame img { width: 100%; height: 100%; object-fit: contain; }
 .mini-tag { position: absolute; top: 6px; left: 6px; background: #df3c43; color: #fff; font-style: normal; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 2px 6px; }
 .info { display: grid; gap: 3px; line-height: 1.35; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
-.info small { font-weight: 400; color: #60766e; font-size: 12px; }
+.info small { font-weight: 400; color: #606d76; font-size: 12px; }
 .info small b { color: #d82f37; font-weight: 700; }
 .error { color: #b42a26; }
 .warn { background: #fff7e6; border: 1px solid #f2d59b; color: #7a4d0b; border-radius: 8px; padding: 10px 12px; font-size: 13px; }

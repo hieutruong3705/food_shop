@@ -33,6 +33,21 @@ export const paymentStatuses = {
   EXPIRED: "Hết hạn thanh toán",
   REFUND_REQUIRED: "Cần hoàn tiền",
 };
+export const vnpayResponses = {
+  "00": "Giao dịch thành công",
+  "07": "Trừ tiền thành công. Giao dịch bị nghi ngờ liên quan tới lừa đảo hoặc bất thường",
+  "09": "Thẻ hoặc tài khoản chưa đăng ký dịch vụ Internet Banking tại ngân hàng",
+  "10": "Khách hàng xác thực thông tin thẻ hoặc tài khoản không đúng quá 3 lần",
+  "11": "Đã hết hạn chờ thanh toán, vui lòng thực hiện lại giao dịch",
+  "12": "Thẻ hoặc tài khoản của khách hàng bị khóa",
+  "13": "Khách hàng nhập sai mật khẩu xác thực giao dịch OTP",
+  "24": "Khách hàng hủy giao dịch",
+  "51": "Tài khoản không đủ số dư",
+  "65": "Tài khoản đã vượt quá hạn mức giao dịch trong ngày",
+  "75": "Ngân hàng thanh toán đang bảo trì",
+  "79": "Khách hàng nhập sai mật khẩu thanh toán quá số lần quy định",
+  "99": "Lỗi khác",
+};
 export function imageUrl(value) {
   return !value
     ? "/tech/laptop.svg"

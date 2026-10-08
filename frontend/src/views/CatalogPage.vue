@@ -9,6 +9,9 @@ import BrandMark from '../components/BrandMark.vue';
 import FilterRange from '../components/FilterRange.vue';
 const route = useRoute(), router = useRouter();
 const result = ref(null), categories = ref([]), facets = ref(null), filters = ref({}), busy = ref(false), error = ref('');
+// Danh mục nhiều thông số sinh ra rất nhiều nhóm lọc; chỉ mở sẵn vài nhóm đầu để cột lọc không dài vô tận.
+const SPEC_LIMIT = 6, allSpecs = ref(false), PAGE_SIZE = 20;
+const shownSpecs = computed(() => allSpecs.value ? (facets.value?.specs || []) : (facets.value?.specs || []).slice(0, SPEC_LIMIT));
 const filtersOpen = ref(false);
 const priceLow=ref(0),priceHigh=ref(0);
 const hiddenSpecs=['phiên bản','kết nối','bảo hành','version','connection','warranty'];
@@ -20,11 +23,14 @@ async function load() {
   const obsolete=Object.keys(route.query).filter(key=>key.startsWith('spec.')&&hiddenSpecs.includes(key.slice(5).trim().toLowerCase()));
   if(obsolete.length){const query={...route.query};for(const key of obsolete)delete query[key];await router.replace({query});return;}
   const id = ++requestId;
-  filters.value = {...route.query, categoryId:route.query.categoryId || '', sort:route.query.sort || 'newest', brandIds: array(route.query.brandIds || route.query.brandId).map(String)};
+  filters.value = {...route.query, categoryId:route.query.categoryId || '', sort:route.query.sort || (route.query.categoryId ? 'newest' : 'featured'), brandIds: array(route.query.brandIds || route.query.brandId).map(String)};
   delete filters.value.brandId;
   busy.value = true; error.value = ''; facets.value = null;
   try {
-    const [p,f] = await Promise.all([api('/products?' + queryString(route.query)), api('/catalog/facets?' + queryString({categoryId:route.query.categoryId}))]);
+    // Lưới danh mục rộng 4 cột; 20 sản phẩm lấp đúng 5 hàng nên không có hàng cụt.
+    // Không chọn danh mục thì xếp "Nổi bật" để các loại hàng xen kẽ, tránh dồn một lô nhập.
+    const query = { size: PAGE_SIZE, sort: route.query.categoryId ? 'newest' : 'featured', ...route.query };
+    const [p,f] = await Promise.all([api('/products?' + queryString(query)), api('/catalog/facets?' + queryString({categoryId:route.query.categoryId}))]);
     if(id === requestId) { result.value = p; facets.value = f;priceLow.value=Number(route.query.minPrice??f.minPrice);priceHigh.value=Number(route.query.maxPrice??f.maxPrice); }
   } catch(e) { if(id === requestId) { error.value = e.message; result.value = null; } }
   finally { if(id === requestId) busy.value = false; }
@@ -42,7 +48,7 @@ function apply(page = 0) {
   router.push({query:q});
 }
 const signature = q => JSON.stringify(Object.keys(q).sort().map(k => [k, array(q[k]).map(String).sort()]));
-const pending = computed(() => signature(cleaned(filters.value)) !== signature(cleaned({...route.query, sort: route.query.sort || 'newest', brandIds: array(route.query.brandIds || route.query.brandId)})));
+const pending = computed(() => signature(cleaned(filters.value)) !== signature(cleaned({...route.query, sort: route.query.sort || (route.query.categoryId ? 'newest' : 'featured'), brandIds: array(route.query.brandIds || route.query.brandId)})));
 function changeCategory() { const categoryId = filters.value.categoryId; filters.value = {categoryId, sort:filters.value.sort || 'newest'}; apply(); }
 function toggle(key,value) { const list = array(filters.value[key]).map(String); filters.value[key] = list.includes(String(value)) ? list.filter(x => x !== String(value)) : [...list,String(value)]; }
 // A bound left at the catalog's own minimum or maximum is no filter, so it stays out of the URL.
@@ -75,13 +81,14 @@ onMounted(async () => { load(); try { categories.value = await api('/categories'
         <details v-if="facets.total" open><summary>Mức giá</summary><FilterRange label="Giá" :min="facets.minPrice" :max="facets.maxPrice" :low="priceLow" :high="priceHigh" :step="10000" :format="money" @change="setPrice" /></details>
         <details open><summary>Tình trạng</summary><label class="facet-option"><input type="checkbox" :checked="filters.inStock === 'true'" @change="filters.inStock = $event.target.checked ? 'true' : ''" />Sẵn hàng <small>[{{ facets.inStockCount }}]</small></label></details>
         <p v-if="!route.query.categoryId" class="muted">Chọn danh mục để lọc theo thông số riêng.</p>
-        <details v-for="spec in facets.specs" :key="spec.name" open><summary>{{ spec.name }}</summary><div class="facet-values"><label v-for="v in spec.values" :key="v.value" class="facet-option"><input type="checkbox" :checked="array(filters['spec.'+spec.name]).includes(v.value)" @change="toggle('spec.'+spec.name,v.value)" /><span>{{ v.value }}</span><small>[{{ v.count }}]</small></label></div></details>
+        <details v-for="spec in shownSpecs" :key="spec.name"><summary>{{ spec.name }}</summary><div class="facet-values"><label v-for="v in spec.values" :key="v.value" class="facet-option"><input type="checkbox" :checked="array(filters['spec.'+spec.name]).includes(v.value)" @change="toggle('spec.'+spec.name,v.value)" /><span>{{ v.value }}</span><small>[{{ v.count }}]</small></label></div></details>
+        <button v-if="facets.specs.length > SPEC_LIMIT" type="button" class="text-button more-filters" @click="allSpecs = !allSpecs">{{ allSpecs ? "Thu gọn bộ lọc" : `Xem thêm ${facets.specs.length - SPEC_LIMIT} bộ lọc` }}</button>
         <small class="facet-count-note">Số lượng theo toàn bộ danh mục. Giá lọc là giá niêm yết.</small>
         <div class="filter-apply"><button type="button" :disabled="busy || !pending" @click="apply()">Áp dụng bộ lọc</button><small v-if="pending" role="status">Có thay đổi chưa áp dụng</small></div>
       </template>
     </aside>
     <section class="catalog-results">
-      <form class="catalog-toolbar" @submit.prevent="apply()"><input v-model="filters.search" aria-label="Tìm sản phẩm" placeholder="Tìm trong danh mục…" /><select v-model="filters.sort" aria-label="Sắp xếp" @change="apply()"><option value="newest">Mới nhất</option><option value="popular">Bán chạy</option><option value="price-asc">Giá tăng dần</option><option value="price-desc">Giá giảm dần</option></select><button :disabled="busy">Tìm</button></form>
+      <form class="catalog-toolbar" @submit.prevent="apply()"><input v-model="filters.search" aria-label="Tìm sản phẩm" placeholder="Tìm trong danh mục…" /><select v-model="filters.sort" aria-label="Sắp xếp" @change="apply()"><option value="featured">Nổi bật</option><option value="newest">Mới nhất</option><option value="popular">Bán chạy</option><option value="price-asc">Giá tăng dần</option><option value="price-desc">Giá giảm dần</option></select><button :disabled="busy">Tìm</button></form>
       <div v-if="chips.length" class="active-filters"><button v-for="chip in chips" :key="chip.key+chip.value" @click="remove(chip)" :aria-label="`Bỏ ${chip.label}`">{{ chip.label }} ×</button></div>
       <TaskState :busy="busy" :error="error" /><button v-if="error" @click="load">Thử lại</button>
       <p v-if="result" class="muted" aria-live="polite">{{ result.totalElements }} sản phẩm</p>

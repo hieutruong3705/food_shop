@@ -6,6 +6,6 @@ export default defineConfig({
   test: { environment: "jsdom", include: ["tests-unit/**/*.spec.js"] },
   server: {
     host: "127.0.0.1",
-    proxy: Object.fromEntries(["/api", "/images", "/uploads"].map(path => [path, "http://127.0.0.1:8080"])),
+    proxy: Object.fromEntries(["/api", "/images", "/uploads", "/oauth2", "/login/oauth2"].map(path => [path, "http://127.0.0.1:8080"])),
   },
 });

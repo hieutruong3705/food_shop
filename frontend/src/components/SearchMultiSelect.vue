@@ -27,5 +27,5 @@ onUnmounted(()=>{alive=false;sequence++;clearTimeout(timer);});
 </template>
 
 <style scoped>
-.selection-image{width:48px;height:48px;object-fit:contain;flex-shrink:0}.selection-detail{display:block;margin-top:4px;color:#60766e}.selection-options label{align-items:center;gap:10px}
+.selection-image{width:48px;height:48px;object-fit:contain;flex-shrink:0}.selection-detail{display:block;margin-top:4px;color:#606d76}.selection-options label{align-items:center;gap:10px}
 </style>

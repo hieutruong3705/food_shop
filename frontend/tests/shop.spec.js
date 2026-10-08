@@ -187,6 +187,7 @@ test("admin modules and customer routes load and refresh without server errors",
   await expect(page.getByLabel("Giá trị đơn tối thiểu (VND)", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Lưu thay đổi" }).click();
   await expect(page.getByRole("status")).toContainText("Đã lưu");
+  await page.getByRole("button", { name: /Cá nhân/ }).click();
   await page.getByRole("button", { name: "Đăng xuất", exact: true }).click();
   await login(page, "user");
   for (const path of ["/account", "/orders", "/policies", "/cart"]) {
@@ -237,6 +238,7 @@ test("mobile admin and forbidden route", async ({ page }) => {
     path: "test-results/admin-mobile.png",
     fullPage: true,
   });
+  await page.getByRole("button", { name: /Cá nhân/ }).click();
   await page.getByRole("button", { name: "Đăng xuất", exact: true }).click();
   await login(page, "user");
   await page.goto("/admin");
@@ -312,6 +314,7 @@ test("admin creates custom variants, customer selects and cancels with stock res
   const id = catalog.content[0].id;
   const product = await (await page.request.get("/api/v1/products/" + id)).json();
   expect(product.variants).toHaveLength(2);
+  await page.getByRole("button", { name: /Cá nhân/ }).click();
   await page.getByRole("button", { name: "Đăng xuất", exact: true }).click();
   await login(page, "user");
   await page.goto("/products/" + id);
@@ -348,9 +351,28 @@ test("admin creates custom variants, customer selects and cancels with stock res
   await page.getByRole("radio", { name: "Phiên bản: 256 GB", exact: true }).check();
   await page.screenshot({ path: "test-results/variant-mobile.png", fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.getByRole('button', { name: /Cá nhân/ }).click();
   await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click();
   await login(page, 'admin');
   const csrf = await (await page.request.get('/api/v1/auth/csrf')).json();
   const archived = await page.request.delete('/api/v1/admin/products/' + id, { headers: { [csrf.headerName]: csrf.token } });
   expect(archived.ok()).toBeTruthy();
+});
+
+test("buy now sends a single product straight to checkout", async ({ page }) => {
+  await login(page, "user");
+  const available = await (
+    await page.request.get("/api/v1/products?search=NovaBook&size=12&sort=price-asc")
+  ).json();
+  const product = available.content.find((p) => p.quantity >= 1);
+  expect(product, "A demo laptop needs stock for the buy-now flow").toBeTruthy();
+  await page.goto(`/products/${product.id}`);
+  await page.getByRole("button", { name: "Mua ngay" }).click();
+  await expect(page).toHaveURL(/\/checkout\?items=\d+$/);
+  await expect(page.getByRole("heading", { name: "Đơn hàng của bạn" })).toBeVisible();
+  await expect(page.getByText(product.name, { exact: false }).first()).toBeVisible();
+  // Leave the cart as it was found: later tests count its lines.
+  await page.goto("/cart");
+  await page.getByRole("button", { name: "Xóa" }).first().click();
+  await expect(page.locator(".cart-line")).toHaveCount(0);
 });

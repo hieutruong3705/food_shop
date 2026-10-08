@@ -153,42 +153,42 @@ const voucherCut = computed(() => {
 
 <style scoped>
 .offer-form { display: grid; gap: 16px; }
-.card { border: 1px solid #dce6e1; border-radius: 14px; background: #fff; padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.card { border: 1px solid #dce3e6; border-radius: 14px; background: #fff; padding: 20px; display: grid; gap: 14px; min-width: 0; }
 .card header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .card h3 { margin: 0; font-size: 16px; }
 .field { display: grid; gap: 6px; }
-.field > label { display: block; font-size: 14px; font-weight: 600; color: #16352e; }
-.field small { font-weight: 400; color: #60766e; font-size: 12px; }
+.field > label { display: block; font-size: 14px; font-weight: 600; color: #2a5366; }
+.field small { font-weight: 400; color: #606d76; font-size: 12px; }
 .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: 20px; align-items: start; }
 .stack { display: grid; gap: 14px; }
 .presets { display: flex; flex-wrap: wrap; gap: 6px; }
-.presets button { background: #eef4f1; color: #16352e; padding: 7px 13px; font-size: 13px; font-weight: 600; border: 1px solid transparent; }
-.presets button[aria-pressed="true"] { background: #00876d; color: #fff; }
-.preview { display: grid; gap: 10px; background: #f5f8f7; border-radius: 12px; padding: 14px; }
-.kicker { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #60766e; font-weight: 700; }
-.mock { display: grid; gap: 5px; background: #fff; border: 1px solid #e5ece8; border-radius: 12px; padding: 10px; }
-.mock .frame { position: relative; height: 96px; border-radius: 8px; background: linear-gradient(135deg, #e6eeea, #f4f7f6); }
+.presets button { background: #eef2f4; color: #2a5366; padding: 7px 13px; font-size: 13px; font-weight: 600; border: 1px solid transparent; }
+.presets button[aria-pressed="true"] { background: #0085c3; color: #fff; }
+.preview { display: grid; gap: 10px; background: #f5f7f8; border-radius: 12px; padding: 14px; }
+.kicker { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #606d76; font-weight: 700; }
+.mock { display: grid; gap: 5px; background: #fff; border: 1px solid #e5e9ec; border-radius: 12px; padding: 10px; }
+.mock .frame { position: relative; height: 96px; border-radius: 8px; background: linear-gradient(135deg, #e6ebee, #f4f6f7); }
 .tag { position: absolute; top: 8px; left: 8px; background: #df3c43; color: #fff; font-style: normal; font-size: 12px; font-weight: 700; border-radius: 5px; padding: 4px 8px; }
 .mock .name { font-size: 13px; font-weight: 600; }
 .now { color: #d82f37; font-size: 18px; }
 .mock del { color: #7b8581; font-size: 12px; }
 .save { color: #c0392b; font-size: 12px; font-weight: 600; }
 .ticket { display: grid; gap: 8px; background: #fff4d6; border-radius: 12px; padding: 14px; }
-.ticket .big { font-size: 24px; color: #00755f; }
+.ticket .big { font-size: 24px; color: #007bb4; }
 .code { border: 1px dashed #b98a14; border-radius: 8px; background: #fff; padding: 8px 10px; font-weight: 700; letter-spacing: 1px; overflow-wrap: anywhere; }
 .ticket small { color: #6b5a2a; font-size: 12px; }
-.example { margin: 0; font-size: 12px; color: #60766e; }
+.example { margin: 0; font-size: 12px; color: #606d76; }
 .state { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 12px; }
-.state.on { background: #e2f3ec; color: #00755f; }
+.state.on { background: #e2eef3; color: #007bb4; }
 .state.soon { background: #e7effb; color: #2456a6; }
-.state.off { background: #eceff0; color: #5a6a70; }
+.state.off { background: #eceef0; color: #5a6770; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
 .switch-row span { display: grid; gap: 2px; font-size: 14px; }
-.switch-row small { color: #60766e; font-size: 12px; }
-.switch { width: 46px; height: 26px; padding: 0; border-radius: 999px; background: #c9d4cf; position: relative; gap: 0; flex-shrink: 0; }
+.switch-row small { color: #606d76; font-size: 12px; }
+.switch { width: 46px; height: 26px; padding: 0; border-radius: 999px; background: #c9cfd4; position: relative; gap: 0; flex-shrink: 0; }
 .switch i { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
-.switch[aria-checked="true"] { background: #00876d; }
+.switch[aria-checked="true"] { background: #0085c3; }
 .switch[aria-checked="true"] i { transform: translateX(20px); }
 @media (max-width: 820px) { .split, .two { grid-template-columns: 1fr; } }
 </style>

@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import ProductCard from '../ProductCard.vue';
 import ShopIcon from '../ShopIcon.vue';
-import { rateText } from '../../lib/shop';
+import { imageUrl, imageError, rateText } from '../../lib/shop';
 
 // The running promotion with the highest rate and the products it discounts, counting down to its end.
 const props = defineProps({ promotion: { type: Object, required: true } });
@@ -20,10 +20,11 @@ onUnmounted(() => clearInterval(timer));
 
 <template>
   <section v-if="left > 0" class="home-block promo-row" aria-labelledby="promo-title">
+    <img v-if="promotion.imageUrl" class="promo-banner" :src="imageUrl(promotion.imageUrl)" :alt="promotion.name" @error="imageError" />
     <div class="promo-head">
       <div>
         <span class="campaign-tag"><ShopIcon name="bolt" /> ƯU ĐÃI ĐANG DIỄN RA</span>
-        <h2 id="promo-title">{{ promotion.name }} <b class="promo-rate">Giảm {{ rateText(promotion.discountRate) }}%</b></h2>
+        <h2 id="promo-title">{{ promotion.name }}</h2><b class="promo-rate">Giảm {{ rateText(promotion.discountRate) }}%</b>
         <p v-if="promotion.description">{{ promotion.description }}</p>
         <small>{{ promotion.scopeDescription }}</small>
       </div>
@@ -32,7 +33,7 @@ onUnmounted(() => clearInterval(timer));
         <div><b v-if="parts.days">{{ parts.days }}<i>ngày</i></b><b>{{ two(parts.hours) }}<i>giờ</i></b><b>{{ two(parts.minutes) }}<i>phút</i></b><b>{{ two(parts.seconds) }}<i>giây</i></b></div>
       </div>
     </div>
-    <div class="product-grid"><ProductCard v-for="p in promotion.products" :key="p.id" :product="p" /></div>
+    <div class="product-grid"><ProductCard v-for="p in promotion.products || []" :key="p.id" :product="p" /></div>
     <RouterLink class="promo-more" :to="{ path: '/products', query: { promotionId: promotion.id } }">Xem tất cả sản phẩm ưu đãi <ShopIcon name="arrow" /></RouterLink>
   </section>
 </template>
