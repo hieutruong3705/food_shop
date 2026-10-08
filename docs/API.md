@@ -43,7 +43,13 @@ Mã xác minh email và token đặt lại mật khẩu là 256 bit ngẫu nhiê
 
 `GET /offers` trả toàn bộ mã đủ điều kiện để luân phiên (không cắt còn 6 mã). Promotion có thêm `hasAvailableProducts`: false khi các sản phẩm áp dụng chưa mở bán; vẫn trả mức giảm của chương trình active, còn hạn và có cấu hình phạm vi. Giao diện hiện trạng thái này và không dẫn đến danh sách rỗng. Giá bán/checkout vẫn tính theo sản phẩm và kiểm tra điều kiện ở backend.
 
-Chat Gemini: `POST /api/chat` (alias `/api/v1/chat`) nhận `message` và `history` tùy chọn (tối đa 8 tin, role user/assistant), trả `reply` và `provider`. `GET /api/chat/status` hoặc `/api/v1/chat/status` chỉ trả provider. Không cấu hình khóa thì dùng mock; lỗi Gemini không ngầm chuyển sang mock. CSRF vẫn bắt buộc khi POST. Cấu hình và giới hạn: [CHATBOT.md](CHATBOT.md).
+Ảnh ưu đãi và vị trí banner:
+
+- `GET /offers` và `GET /home` trả thêm `imageUrl` cho promotion và voucher (ảnh admin upload qua `POST /api/v1/admin/uploads`); không có ảnh thì trả chuỗi rỗng, không trả `null`.
+- Banner có `placement`: `HOME_HERO` (mặc định, băng chuyền đầu trang chủ), `VOUCHER_PAGE` (trang mã giảm giá), `HOME_BANNER_1`–`HOME_BANNER_3` (banner ngang trang chủ), `HOME_BRAND_1_1`–`HOME_BRAND_1_4` (chuyên trang thương hiệu), `HOME_GROUP_1`–`HOME_GROUP_5` (banner quảng cáo ở đầu từng nhóm "Sản phẩm mới": nhóm 1, 3, 5 chiếm 2 ô sản phẩm – ảnh 970×884; nhóm 2, 4 chiếm 1 ô – ảnh 470×884), `HOME_RECENT` (banner 1 ô ở cuối hàng "Bạn vừa xem" – ảnh 470×884). `GET /banners` không truyền tham số vẫn chỉ trả banner `HOME_HERO` như trước; `GET /banners?placement=...` trả banner của vị trí đó, giá trị không hợp lệ trả 400.
+- Admin thêm `imageUrl` cho promotion/voucher và `placement` cho banner; banner lưu không kèm `placement` mặc định về `HOME_HERO`.
+
+Chat AI: `POST /api/chat` (alias `/api/v1/chat`) nhận `message` và `history` tùy chọn (tối đa 8 tin, role user/assistant), trả `reply` và `provider`. `GET /api/chat/status` hoặc `/api/v1/chat/status` chỉ trả provider. Không cấu hình khóa thì dùng mock; lỗi từ nhà cung cấp không ngầm chuyển sang mock. CSRF vẫn bắt buộc khi POST. Cấu hình và giới hạn: [CHATBOT.md](CHATBOT.md).
 
 Chat public vẫn cần CSRF lấy qua `/api/v1/auth/csrf`, message 1–1.000 ký tự không trắng. Không có AI key trong frontend.
 
@@ -60,7 +66,7 @@ Danh sách sản phẩm công khai và quản trị luôn ưu tiên `quantity > 
 | GET | /products | search,categoryId,brandId,brandIds,minPrice,maxPrice,inStock,spec.{tên},sort,page,size |
 | GET | /catalog/facets?categoryId=... | Hãng kèm logo, khoảng giá, số lượng còn hàng và nhóm thông số riêng của danh mục |
 | GET | /products/{id} | Sản phẩm, ảnh, thông số, SKU và bảo hành |
-| GET | /categories, /brands, /banners, /policies | Nội dung đã duyệt cho catalog công nghệ |
+| GET | /categories, /brands, /banners, /policies | Nội dung đã duyệt cho catalog công nghệ; /banners nhận `placement` tùy chọn (`HOME_HERO` mặc định; các vị trí khác xem mục "Ảnh ưu đãi và vị trí banner") |
 | GET | /policies/{id} | Chi tiết chính sách đang hiển thị |
 | GET, POST | /products/{id}/reviews | POST: rating 1–5,content; yêu cầu đơn COMPLETED |
 | PUT, DELETE | /products/{id}/reviews/{reviewId} | Chỉ chủ đánh giá được sửa/xóa; GET trả editable theo phiên |
@@ -75,8 +81,13 @@ Danh sách sản phẩm công khai và quản trị luôn ưu tiên `quantity > 
 | GET | /payments/options | COD và trạng thái cấu hình VNPay sandbox |
 | POST | /orders/{id}/payment | URL VNPay sandbox cho đơn online chưa thanh toán |
 | GET | /payments/vnpay/ipn | Callback có chữ ký; không cần session. IPN thành công đến sau khi đơn hủy/hết hạn: `RspCode 00`, đơn giữ `CANCELLED`, `paymentStatus=REFUND_REQUIRED`, mã giao dịch lưu ở `paymentReference`; IPN lặp lại trả `02` |
+| GET | /orders/{id}/payment-status | Trạng thái gọn để FE poll: `orderStatus`, `paymentStatus`, `paymentReference`, `expiresAt`, `refundRequired`. `expiresAt` là mốc ISO-8601 (`createdAt` + 900 giây), `null` khi đơn không còn chờ thanh toán online |
+| GET | /payments/vnpay/return | Đọc kết quả ở return URL, có kiểm tra chữ ký, không cần session (phiên có thể mất sau redirect). **Chỉ đọc, không đổi trạng thái đơn.** Trả `valid`, `orderId`, `responseCode`, `transactionStatus`, `amount` (VND, đã chia 100), `bankCode`, `transactionNo`, `orderStatus`, `paymentStatus`, `paymentReference`, `refundRequired`, `message`. Đủ để trang kết quả tự poll bằng chính endpoint này, không cần session. Sai chữ ký: `valid=false`, các trường còn lại `null`, không tiết lộ thông tin đơn |
+| POST | /admin/orders/{id}/payment/reconcile | Đối soát `querydr` khi IPN không về. Trả `verified`, `responseCode`, `transactionStatus`, `message`, `applied` (`RspCode` khi có áp dụng, `null` khi không), `orderStatus`, `paymentStatus`, `paymentReference`, `refundRequired` |
 
 `POST /orders` yêu cầu header `Idempotency-Key` (16–80 ký tự chữ/số/gạch ngang). Gửi lại cùng key và nội dung trả cùng đơn; cùng key nhưng nội dung khác bị từ chối. Không nhận giá/tổng tiền/quyền từ client.
+
+Trạng thái thanh toán chỉ thay đổi qua IPN đã xác thực chữ ký hoặc qua đối soát `querydr` đã xác thực chữ ký phản hồi. Return URL là thông tin tham khảo cho giao diện, không phải nguồn sự thật. Đối soát chỉ áp dụng khi `vnp_ResponseCode=00` và `vnp_TransactionStatus` là `00` (đã thu tiền) hoặc `02` (thất bại); `01` (đang xử lý) được giữ nguyên để job quét lại hoặc hết hạn. Job hết hạn gọi `querydr` trước khi nhả tồn kho, tránh hủy đơn đã thu tiền.
 
 Đơn trả thêm `refundRequired` và `paymentReference`. Admin lọc đơn cần hoàn tiền bằng `GET /admin/orders?refundRequired=true`; `GET /admin/dashboard` có `refundRequired` (tổng đơn cần hoàn tiền, không phụ thuộc khoảng ngày). Đơn `REFUND_REQUIRED` không có `allowedStatuses` và không lưu trữ được.
 
@@ -93,7 +104,7 @@ Quy tắc 1 và 2 dưới đây là hành vi hiện tại của `CommerceService
 | # | Quy tắc hiện tại | Ví dụ | Trạng thái |
 | --- | --- | --- | --- |
 | 1 | Đơn tối thiểu của voucher so với **tổng toàn bộ các dòng được chọn**, không phải tổng các dòng đủ điều kiện. Mức giảm chỉ tính trên các dòng đủ điều kiện. | Voucher Laptop 10%, tối thiểu 5.000.000₫. Giỏ gồm laptop 1.000.000₫ và một món khác 4.000.000₫ vẫn được áp dụng, giảm 100.000₫. Món khác 3.999.999₫ thì bị từ chối | Chờ xác nhận |
-| 2 | Miễn phí vận chuyển khi **tổng trước khi trừ voucher** từ 1.000.000₫; ngược lại phí 30.000₫. | Đơn 1.050.000₫ trừ voucher 10% còn 945.000₫ vẫn miễn phí ship. Đơn 999.999₫ trả 30.000₫ | Chờ xác nhận |
+| 2 | Miễn phí vận chuyển cho mọi đơn. `shippingFee` luôn trả `0`; trường vẫn giữ trên quote và đơn để đơn cũ (phí 30.000₫) báo đúng số đã thu. | Đơn 999.999₫ trả 0₫ phí vận chuyển | Chờ xác nhận |
 | 3 | Lượt dùng voucher (`usedCount`) **được hoàn lại một lần** khi đơn bị hủy, thanh toán thất bại hoặc hết hạn thanh toán (đổi ngày 2026-09-30, theo `docs/PLAN-UI-REVIEW.md` L1). | Voucher giới hạn 1 lượt: khách A đặt rồi hủy, khách B dùng được | Đã đổi, cần chủ dự án xác nhận |
 
 Đọc giỏ hàng, báo giá và danh sách/chi tiết đơn (`GET /cart`, `GET /cart/quote`, `GET /orders`, `GET /orders/{id}`) chạy `readOnly` và không dùng `SELECT ... FOR UPDATE`; `GET /cart` không tạo giỏ hàng mới. Báo giá chỉ để hiển thị: checkout khóa lại người mua, voucher và sản phẩm rồi kiểm tra từ đầu. `POST /cart/items`, `PATCH/DELETE /cart/items/{id}`, `POST /orders` và đổi trạng thái đơn vẫn khóa như trước.

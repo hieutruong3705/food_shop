@@ -34,6 +34,8 @@ Mở **http://127.0.0.1:5173**. Backend ở port 8080; Vite proxy `/api`, `/imag
 - Demo có 35 sản phẩm minh họa trong 8 danh mục, 2 thương hiệu, banner, khuyến mãi Orbit Demo, voucher `TECH10` và chính sách mẫu. Sản phẩm “Điện thoại Orbit nhiều phiên bản” có màu Đen/Trắng và dung lượng 128/256 GB. Seed chạy lại không nhân đôi sản phẩm hoặc đặt lại mật khẩu.
 - Database đang dùng: MySQL `techshop`. Dữ liệu H2 cũ đã chuyển ngày 29/09, giữ nguyên ID, tài khoản, ảnh, biến thể và đơn hàng. Bản sao lưu ở `data/backups/mysql-switch-20260929-071250`.
 - Email trong profile `dev` được lưu tại `data/dev-mail/*.eml`; mở tệp mới nhất để lấy liên kết xác minh/đặt lại mật khẩu. Profile này không gửi SMTP thật.
+- Đăng nhập Google: tạo `data/oauth-local.properties` (Git bỏ qua) với `spring.security.oauth2.client.registration.google.client-id` và `.client-secret` lấy từ Google Cloud Console. Trong Console phải khai báo Authorized redirect URI đúng bằng `<shop.client-url>/login/oauth2/code/google` (local: `http://localhost:8080/login/oauth2/code/google`). Không cấu hình thì nút "Tiếp tục với Google" tự ẩn.
+- Để gửi email thật qua Gmail, tạo `data/mail-local.properties` (Git bỏ qua) với `spring.mail.host=smtp.gmail.com`, `spring.mail.port=587`, `spring.mail.username`/`shop.mail-from` là địa chỉ Gmail, `spring.mail.password` là App Password 16 ký tự, bật `mail.smtp.auth`/`starttls.enable` và đặt `shop.dev-mail-enabled=false`. Spring tự nạp tệp này.
 - Dữ liệu demo không đại diện thông số hoặc giá của sản phẩm thương mại. Sản phẩm, ảnh và phiên bản được lưu qua API vào database, không phải dữ liệu giả ở frontend.
 
 ## MySQL và dữ liệu hiện có
@@ -55,7 +57,7 @@ npm run test:e2e
 
 Nếu PowerShell chặn `npm.ps1`, dùng `npm.cmd` (không cần đổi execution policy toàn máy). Script `.ps1` có thể chạy bằng `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <script>`.
 
-Test Java mặc định dùng H2 cô lập. Trước E2E, chạy `npm.cmd --prefix frontend run build` và `.\mvnw.cmd package`. Playwright tự mở backend `dev,e2e` tại `127.0.0.1:18080`, với H2 file `data/techshop-e2e` được tạo lại mỗi lượt; không dùng MySQL `techshop`. Không cần mở Vite/backend dev. Chỉ URL 18080 được chấp nhận và không tái sử dụng server đang chạy. Tài khoản ngẫu nhiên nằm trong `data/e2e-credentials.json`, mail và ảnh test ở `data/e2e-mail`/`data/e2e-uploads`; tất cả đã ignore. Playwright dùng Chrome cài sẵn, không gọi Gemini, SMTP hoặc VNPay thật. Ảnh và báo cáo ở `frontend/test-results` và `frontend/playwright-report`.
+Test Java mặc định dùng H2 cô lập. Trước E2E, chạy `npm.cmd --prefix frontend run build` và `.\mvnw.cmd package`. Playwright tự mở backend `dev,e2e` tại `127.0.0.1:18080`, với H2 file `data/techshop-e2e` được tạo lại mỗi lượt; không dùng MySQL `techshop`. Không cần mở Vite/backend dev. Chỉ URL 18080 được chấp nhận và không tái sử dụng server đang chạy. Tài khoản ngẫu nhiên nằm trong `data/e2e-credentials.json`, mail và ảnh test ở `data/e2e-mail`/`data/e2e-uploads`; tất cả đã ignore. Playwright dùng Chrome cài sẵn, không gọi dịch vụ AI, SMTP hoặc VNPay thật. Ảnh và báo cáo ở `frontend/test-results` và `frontend/playwright-report`.
 
 Kiểm thử MySQL thật với instance riêng, nếu máy có MySQL Server 8 tại đường dẫn mặc định:
 
@@ -85,7 +87,7 @@ Khách phải chọn phiên bản trước khi thêm vào giỏ; giá, ảnh, SK
 
 Trang chi tiết chia ô chọn theo từng thuộc tính. Ô màu có ảnh thu nhỏ, ô đang chọn có viền đỏ và dấu tích; cấu hình không có sẵn bị khóa. Đổi màu sẽ bỏ lựa chọn cấu hình không tương thích. Chữ phụ, menu, form và bảng đã tăng nhẹ; nội dung chữ nhỏ tối thiểu 12px (trừ dấu tích trang trí).
 
-Xem [docs/API.md](docs/API.md). Dùng cookie phiên và CSRF; frontend luôn gửi credentials. USER chỉ truy cập dữ liệu của mình; ADMIN được kiểm tra ở backend. Giá khuyến mãi, voucher và phí giao hàng đều tính ở server. Đơn từ 1 triệu đồng được miễn phí vận chuyển, còn lại 30.000₫. Khuyến mãi chọn mức giảm cao nhất, voucher tiếp tục áp dụng trên các dòng đủ điều kiện. Giá VND được làm tròn đến đồng.
+Xem [docs/API.md](docs/API.md). Dùng cookie phiên và CSRF; frontend luôn gửi credentials. USER chỉ truy cập dữ liệu của mình; ADMIN được kiểm tra ở backend. Giá khuyến mãi và voucher đều tính ở server. Mọi đơn được miễn phí vận chuyển; `shippingFee` giữ lại trên đơn để các đơn cũ báo đúng số phí đã thu. Khuyến mãi chọn mức giảm cao nhất, voucher tiếp tục áp dụng trên các dòng đủ điều kiện. Giá VND được làm tròn đến đồng.
 
 Checkout yêu cầu `Idempotency-Key`; khóa người mua và sản phẩm trong transaction, đọc lại tồn kho bằng locking read để tương thích MySQL REPEATABLE READ. Hủy đơn hoàn tồn kho một lần. Thông tin tên/SKU/đơn giá được lưu vào dòng đơn hàng.
 
@@ -96,6 +98,47 @@ Upload tại `/api/v1/admin/uploads`: PNG/JPEG/WebP tối đa 5 MB, kiểm tra c
 ## VNPay sandbox
 
 Mặc định tắt. Cần `VNPAY_ENABLED=true`, `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` do VNPay sandbox cấp, cùng `CLIENT_URL` của frontend. Chỉ cho phép endpoint sandbox; không có cấu hình thanh toán live.
+
+### Đặt cấu hình cục bộ
+
+Hash secret không commit. Cách gọn nhất là tạo `data/vnpay-local.properties` (toàn bộ `data/` đã ignore), Spring tự import khi khởi động:
+
+```properties
+shop.vnpay.enabled=true
+shop.vnpay.tmn-code=<Terminal ID>
+shop.vnpay.secret=<Secret Key>
+```
+
+`shop.vnpay.return-url` phải cùng host với địa chỉ đang mở trên trình duyệt. `localhost` và `127.0.0.1` là hai origin khác nhau với cookie, nên trả về sai host sẽ làm mất phiên đăng nhập sau khi quay lại từ VNPay. Trang kết quả vẫn đọc được trạng thái (nó xác thực bằng chữ ký, không bằng phiên), nhưng phần còn lại của giao diện sẽ coi như chưa đăng nhập.
+
+Hoặc dùng biến môi trường `VNPAY_ENABLED`, `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`. `scripts/run-backend.ps1` in ra trạng thái cấu hình khi chạy. Ba địa chỉ của cổng cũng cấu hình được, mặc định trỏ sandbox: `shop.vnpay.pay-url` (`VNPAY_PAY_URL`), `shop.vnpay.query-url` (`VNPAY_QUERY_URL`) và `shop.vnpay.return-url` (`VNPAY_RETURN_URL`). Để trống `return-url` thì dùng `shop.client-url` + `/payment-return`, phù hợp cả Vite 5173 và JAR đã build ở 8080.
+
+### Mở IPN ra internet
+
+VNPay gọi IPN từ máy chủ của họ nên `localhost` không nhận được; thiếu bước này đơn sẽ không bao giờ chuyển `PAID`. Mở tunnel rồi khai báo URL trên [merchant admin](https://sandbox.vnpayment.vn/merchantv2/):
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8080
+# hoặc: ngrok http 8080
+```
+
+URL khai báo là `https://<host-tunnel>/api/v1/payments/vnpay/ipn`. Đặt luôn `VNPAY_RETURN_URL=https://<host-tunnel>/payment-return` nếu muốn thử trên host tunnel thay vì máy cục bộ.
+
+### Đối soát khi IPN không về
+
+`POST /api/v1/admin/orders/{id}/payment/reconcile` gọi `querydr` sang VNPay, kiểm tra chữ ký phản hồi rồi áp dụng kết quả qua đúng luồng của IPN. Job hết hạn cũng gọi `querydr` trước khi nhả tồn kho, nên đơn đã thu tiền mà mất IPN không bị hủy oan.
+
+### Chạy bộ SIT test case
+
+Đăng nhập [SIT testing](https://sandbox.vnpayment.vn/vnpaygw-sit-testing/user/login) bằng tài khoản merchant TEST, khai IPN URL ở trên, rồi theo thứ tự:
+
+1. Bật VNPay, khởi động backend và tunnel; kiểm tra `GET /api/v1/payments/options` trả `vnpay: true`.
+2. Đặt một đơn `VNPAY`, bấm thanh toán, trả bằng thẻ test NCB `9704198526191432198` / `NGUYEN VAN A` / `07/15` / OTP `123456`.
+3. Thành công: xem IPN trong log, đơn chuyển `PAID`, `paymentReference` có mã giao dịch.
+4. Thất bại và hủy giữa luồng: đơn chuyển `FAILED`/`CANCELLED` và tồn kho được hoàn.
+5. Hết hạn: để đơn quá 20 phút, job quét gọi `querydr` rồi đặt `EXPIRED`.
+6. IPN đến muộn sau khi hủy: đơn giữ `CANCELLED` với `paymentStatus=REFUND_REQUIRED`.
+7. Gửi lại cùng IPN: phải nhận `RspCode 02` và không đổi gì.
 
 Đăng ký IPN `/api/v1/payments/vnpay/ipn` với VNPay. IPN kiểm tra HMAC, merchant, mã đơn, số tiền và trạng thái trước khi cập nhật. Trang return không tự đánh dấu đã thanh toán. Đơn chưa thanh toán hết hạn sau 20 phút và hoàn kho; link thanh toán có hạn 15 phút. Job hết hạn luôn chạy, kể cả khi tắt VNPay, để đơn VNPAY chưa trả không giữ kho vĩnh viễn. Đơn online đã thanh toán không được hủy bằng luồng COD; cần quy trình hoàn tiền riêng trước khi triển khai thanh toán live.
 
