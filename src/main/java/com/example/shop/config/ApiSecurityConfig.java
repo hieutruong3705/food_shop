@@ -34,7 +34,7 @@ public class ApiSecurityConfig {
                 .requestMatchers(HttpMethod.POST,"/api/chat","/api/v1/chat").permitAll()
                 .requestMatchers(HttpMethod.GET,"/api/chat/status","/api/v1/chat/status").permitAll()
                 .requestMatchers(HttpMethod.GET,"/api/v1/catalog/menu","/api/v1/offers","/api/v1/home").permitAll()
-                .requestMatchers(HttpMethod.GET,"/api/v1/payments/vnpay/ipn").permitAll()
+                .requestMatchers(HttpMethod.GET,"/api/v1/payments/vnpay/ipn","/api/v1/payments/vnpay/return").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/**", "/api/v1/catalog/facets", "/api/v1/categories", "/api/v1/brands", "/api/v1/banners", "/api/v1/policies/**").permitAll()
                 .anyRequest().authenticated())
             .exceptionHandling(e -> e

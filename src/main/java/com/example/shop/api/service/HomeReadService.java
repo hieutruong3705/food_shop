@@ -55,12 +55,13 @@ public class HomeReadService {
     private final OrderDetailRepository orderDetails;
     private final ReviewRepository reviews;
     private final PromotionPricing pricing;
+    private final ProductRatings ratings;
     private final Clock clock;
     private final long cacheSeconds;
     private volatile Cached cached;
 
     public HomeReadService(PromotionRepository promotions, ProductRepository products, BrandRepository brands, CategoryRepository categories,
-            OrderDetailRepository orderDetails, ReviewRepository reviews, PromotionPricing pricing, Clock clock,
+            OrderDetailRepository orderDetails, ReviewRepository reviews, PromotionPricing pricing, ProductRatings ratings, Clock clock,
             @Value("${shop.home-cache-seconds:30}") long cacheSeconds) {
         this.promotions = promotions;
         this.products = products;
@@ -69,6 +70,7 @@ public class HomeReadService {
         this.orderDetails = orderDetails;
         this.reviews = reviews;
         this.pricing = pricing;
+        this.ratings = ratings;
         this.clock = clock;
         this.cacheSeconds = cacheSeconds;
     }
@@ -101,9 +103,10 @@ public class HomeReadService {
             var shown = latest(OfferScopeSpecification.visible(promotion), PROMOTION_PRODUCTS);
             if (shown.isEmpty()) continue;
             return map("id", promotion.getId(), "name", promotion.getName(), "description", promotion.getDescription(),
+                    "imageUrl", promotion.getImageUrl() == null ? "" : promotion.getImageUrl(),
                     "discountRate", promotion.getDiscountRate(), "endDate", promotion.getEndDate(),
                     "scopeDescription", OfferScopeText.describe(promotion),
-                    "products", shown.stream().map(p -> ProductSummaryResponse.from(p, discounts)).toList());
+                    "products", shown.stream().map(p -> ProductSummaryResponse.from(p, discounts, ratings.of(shown))).toList());
         }
         return null;
     }
@@ -122,10 +125,11 @@ public class HomeReadService {
     private List<Map<String, Object>> bestSellers(PromotionPricing.Discounts discounts) {
         var ranking = orderDetails.topSalesOverall(PageRequest.of(0, BEST_SELLERS));
         var byId = products.findAllById(ranking.stream().map(r -> r.getProductId()).toList()).stream().collect(Collectors.toMap(Product::getId, p -> p));
+        var scores = ratings.of(byId.values());
         var rows = new ArrayList<Map<String, Object>>();
         for (var rank : ranking) {
             Product p = byId.get(rank.getProductId());
-            if (p != null) rows.add(map("product", ProductSummaryResponse.from(p, discounts), "units", rank.getUnits()));
+            if (p != null) rows.add(map("product", ProductSummaryResponse.from(p, discounts, scores), "units", rank.getUnits()));
         }
         return rows;
     }

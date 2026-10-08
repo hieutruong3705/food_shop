@@ -14,16 +14,20 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Semaphore;
 
+/**
+ * Talks to an OpenAI-compatible chat completions endpoint (Groq by default), so switching provider
+ * is a base-url, model and key change rather than a code change.
+ */
 @Service
-public class GeminiChatService {
+public class AiChatService {
     private final RestClient client;
     private final String key, model;
     private final boolean enabled;
     private final Semaphore requests = new Semaphore(3);
     private static final String INSTRUCTION = """
         Bạn là trợ lý TechShop AI của cửa hàng bán thiết bị công nghệ. Trả lời bằng tiếng Việt,
-        ngắn gọn, dễ hiểu, văn bản thuần. Tư vấn laptop, điện thoại, phụ kiện, so sánh thiết bị
-        theo nhu cầu và ngân sách. Hỏi lại khi thiếu thông tin quan trọng.
+        ngắn gọn, dễ hiểu, văn bản thuần, không dùng bảng hay Markdown. Tư vấn laptop, điện thoại,
+        phụ kiện, so sánh thiết bị theo nhu cầu và ngân sách. Hỏi lại khi thiếu thông tin quan trọng.
         Bạn không có quyền truy cập dữ liệu đơn hàng, tài khoản hay kho hàng thời gian thực.
         Không bịa giá bán, tồn kho, mã giảm giá, chính sách hoặc khẳng định cửa hàng có một mẫu máy.
         Khi hỏi dữ liệu cửa hàng, hướng dẫn xem danh mục /products, bộ lọc, trang sản phẩm hoặc /orders.
@@ -32,39 +36,38 @@ public class GeminiChatService {
         """;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public GeminiChatService(RestClient.Builder builder,
+    public AiChatService(RestClient.Builder builder,
             @Value("${shop.chat.api-key:}") String key,
-            @Value("${shop.chat.model:gemini-3.5-flash-lite}") String model,
+            @Value("${shop.chat.model:openai/gpt-oss-20b}") String model,
+            @Value("${shop.chat.base-url:https://api.groq.com/openai/v1}") String baseUrl,
             @Value("${shop.chat.enabled:true}") boolean enabled) {
-        this(buildClient(builder),key,model,enabled);
+        this(buildClient(builder,baseUrl),key,model,enabled);
     }
-    private static RestClient buildClient(RestClient.Builder builder){
+    private static RestClient buildClient(RestClient.Builder builder,String baseUrl){
         var factory=new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));factory.setReadTimeout(Duration.ofSeconds(30));
-        return builder.requestFactory(factory).baseUrl("https://generativelanguage.googleapis.com/v1beta").build();
+        return builder.requestFactory(factory).baseUrl(baseUrl).build();
     }
-    GeminiChatService(RestClient client,String key,String model,boolean enabled){
+    AiChatService(RestClient client,String key,String model,boolean enabled){
         this.client=client;this.key=key.trim();this.model=model;this.enabled=enabled;
-        if(!model.matches("[a-zA-Z0-9._-]+"))throw new IllegalArgumentException("Invalid Gemini model configuration");
+        if(!model.matches("[a-zA-Z0-9._/-]+"))throw new IllegalArgumentException("Invalid chat model configuration");
     }
     public boolean configured(){return enabled&&!key.isBlank();}
 
     public String reply(String message,List<Map<String,String>> history) {
         if(!requests.tryAcquire())throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,"Trợ lý đang bận. Bạn thử lại sau ít giây nhé.");
         try {
-            var contents=new ArrayList<Map<String,Object>>();
-            for(var turn:history)contents.add(Map.of("role",turn.get("role").equals("assistant")?"model":"user","parts",List.of(Map.of("text",turn.get("text")))));
-            contents.add(Map.of("role","user","parts",List.of(Map.of("text",message))));
-            var response=client.post().uri("/models/{model}:generateContent",model)
-                .header("x-goog-api-key",key).contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("systemInstruction",Map.of("parts",List.of(Map.of("text",INSTRUCTION))),"contents",contents,
-                    "generationConfig",Map.of("maxOutputTokens",1500,"temperature",0.4)))
+            var messages=new ArrayList<Map<String,Object>>();
+            messages.add(Map.of("role","system","content",INSTRUCTION));
+            for(var turn:history)messages.add(Map.of("role",turn.get("role").equals("assistant")?"assistant":"user","content",turn.get("text")));
+            messages.add(Map.of("role","user","content",message));
+            var response=client.post().uri("/chat/completions")
+                .header("Authorization","Bearer "+key).contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("model",model,"messages",messages,"max_completion_tokens",1500,"temperature",0.4))
                 .retrieve().body(JsonNode.class);
-            var text=new StringBuilder();
-            if(response!=null)for(var part:response.path("candidates").path(0).path("content").path("parts"))
-                if(!part.path("thought").asBoolean(false))text.append(part.path("text").asText(""));
-            if(text.toString().isBlank())throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Trợ lý chưa thể trả lời câu hỏi này. Bạn thử diễn đạt lại nhé.");
-            return text.toString().strip();
+            String text=response==null?"":response.path("choices").path(0).path("message").path("content").asText("");
+            if(text.isBlank())throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Trợ lý chưa thể trả lời câu hỏi này. Bạn thử diễn đạt lại nhé.");
+            return text.strip();
         } catch(RestClientResponseException exception) {
             // Do not log provider bodies/headers: these can contain request data or credentials.
             if(exception.getStatusCode().value()==429)throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,"Trợ lý đã chạm giới hạn sử dụng. Vui lòng thử lại sau.");

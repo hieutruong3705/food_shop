@@ -389,9 +389,9 @@ class CommerceApiTests {
             assertThat(quote.discountAmount()).isEqualTo(100000);assertThat(quote.subtotal()).isEqualTo(1000000+otherLinePrice);
         }else assertThatThrownBy(()->commerce.quote(buyer.getEmail(),code,null)).hasMessageContaining("tối thiểu");
     }
-    @ParameterizedTest(name="shipping is free from 1,000,000 before voucher: price {0}, voucher {1}% -> shipping {2}, total {3}")
-    @CsvSource({"500000,0,30000,530000","999999,0,30000,1029999","1000000,0,0,1000000","1050000,10,0,945000","900000,10,30000,840000"})
-    void freeShippingThresholdUsesTheSubtotalBeforeVoucherDiscount(long price,double percent,double shipping,double total)throws Exception{
+    @ParameterizedTest(name="delivery is free at every basket size: price {0}, voucher {1}% -> shipping {2}, total {3}")
+    @CsvSource({"500000,0,0,500000","999999,0,0,999999","1000000,0,0,1000000","1050000,10,0,945000","900000,10,0,810000"})
+    void deliveryIsFreeWhateverTheBasketIsWorth(long price,double percent,double shipping,double total)throws Exception{
         product.setPrice(price);products.save(product);add(buyer,1);
         String code="";
         if(percent>0){var v=new Voucher();code="SHIP-"+UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);v.setCode(code);v.setDiscount(percent);v.setAll(true);vouchers.save(v);}

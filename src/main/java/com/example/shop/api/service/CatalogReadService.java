@@ -27,7 +27,9 @@ public class CatalogReadService {
     private final java.time.Clock clock;
     private final com.example.shop.api.service.PromotionPricing pricing;
     private final com.example.shop.repository.PromotionRepository promotions;
-    public CatalogReadService(CategoryService categoryService, BannerService bannerService, com.example.shop.repository.ProductRepository products, com.example.shop.repository.BrandRepository brands, java.time.Clock clock, com.example.shop.api.service.PromotionPricing pricing, com.example.shop.repository.OrderDetailRepository orderDetails, com.example.shop.repository.CategoryRepository categories, com.example.shop.repository.PromotionRepository promotions) {
+    private final ProductRatings ratings;
+    public CatalogReadService(CategoryService categoryService, BannerService bannerService, com.example.shop.repository.ProductRepository products, com.example.shop.repository.BrandRepository brands, java.time.Clock clock, com.example.shop.api.service.PromotionPricing pricing, com.example.shop.repository.OrderDetailRepository orderDetails, com.example.shop.repository.CategoryRepository categories, com.example.shop.repository.PromotionRepository promotions, ProductRatings ratings) {
+this.ratings=ratings;
 this.orderDetails=orderDetails;
 this.categories=categories;
 this.promotions=promotions;
@@ -51,7 +53,7 @@ this.promotions=promotions;
         if (specs.size()>24 || (brandIds!=null && brandIds.size()>60) || specs.stream().anyMatch(e -> e.getKey().length()>105 || e.getKey().length()==5 || e.getValue().size()>60 || e.getValue().stream().anyMatch(v -> v.length()>500))) throw new IllegalArgumentException("Bộ lọc không hợp lệ");
         var discounts=pricing.current();
         var runningPromotions=promotionId==null?java.util.List.<com.example.shop.domain.Promotion>of():promotions.findRunning(java.util.Date.from(clock.instant()));
-        return products.findAll((root,q,cb) -> {
+        var found = products.findAll((root,q,cb) -> {
             // Availability is the primary order, before pagination and the chosen sort.
             if(q.getResultType()!=Long.class && q.getResultType()!=long.class) {
                 var available = cb.<Integer>selectCase().when(cb.gt(root.get("quantity"),0),0).otherwise(1);
@@ -59,6 +61,9 @@ this.promotions=promotions;
                     case "price-asc" -> cb.asc(root.get("price"));
                     case "price-desc" -> cb.desc(root.get("price"));
                     case "popular" -> cb.desc(unitsSold(root,q,cb));
+                    // "featured" rải đều các lô hàng nhập cùng đợt: id nhân số nguyên tố rồi lấy dư,
+                    // nên thứ tự trông ngẫu nhiên nhưng ổn định giữa các trang, không trùng và không sót.
+                    case "featured" -> cb.asc(cb.mod(cb.prod(root.get("id").as(Integer.class),7919),101));
                     default -> cb.desc(root.get("id"));
                 };
                 q.orderBy(cb.asc(available),secondary,cb.desc(root.get("id")));
@@ -86,7 +91,9 @@ this.promotions=promotions;
             if(minPrice!=null) filters.add(cb.ge(root.get("price"),minPrice));
             if(maxPrice!=null) filters.add(cb.le(root.get("price"),maxPrice));
             return cb.and(filters.toArray(jakarta.persistence.criteria.Predicate[]::new));
-        },org.springframework.data.domain.PageRequest.of(page,size)).map(p->ProductSummaryResponse.from(p,discounts));
+        },org.springframework.data.domain.PageRequest.of(page,size));
+        var scores=ratings.of(found.getContent());
+        return found.map(p->ProductSummaryResponse.from(p,discounts,scores));
     }
     /**
      * "Best selling" means units in confirmed, shipping or completed orders that are paid or cash on
@@ -164,9 +171,11 @@ this.promotions=promotions;
         return all.stream().filter(c -> counts.getOrDefault(c.getId(), 0L) > 0).map(c -> category(c, counts.get(c.getId()))).toList();
     }
     
-    public List<Map<String, Object>> banners() {
-        return bannerService.getActiveBanners().stream().filter(Banner::isTechnologyCatalog).sorted(java.util.Comparator.comparingLong(Banner::getId).reversed()).map(this::banner).toList();
+    /** Banners of one placement; no placement asked means the home hero, which is what the old call returned. */
+    public List<Map<String, Object>> banners(com.example.shop.domain.BannerPlacement placement) {
+        var wanted = placement == null ? com.example.shop.domain.BannerPlacement.HOME_HERO : placement;
+        return bannerService.getActiveBanners().stream().filter(Banner::isTechnologyCatalog).filter(b -> b.getPlacement() == wanted).sorted(java.util.Comparator.comparingLong(Banner::getId).reversed()).map(this::banner).toList();
     }
     private Map<String, Object> category(Category item, long sellable) { return Map.of("id", item.getId(), "name", item.getName(), "image", item.getImage() == null ? "" : item.getImage(), "productCount", sellable); }
-    private Map<String, Object> banner(Banner item) { return Map.of("id", item.getId(), "name", item.getName(), "imageUrl", item.getImageUrl() == null ? "" : item.getImageUrl(), "link", item.getLink() == null ? "" : item.getLink()); }
+    private Map<String, Object> banner(Banner item) { return Map.of("id", item.getId(), "name", item.getName(), "imageUrl", item.getImageUrl() == null ? "" : item.getImageUrl(), "link", item.getLink() == null ? "" : item.getLink(), "placement", item.getPlacement()); }
 }

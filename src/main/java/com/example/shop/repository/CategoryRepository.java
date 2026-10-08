@@ -9,6 +9,8 @@ import java.util.List;
 public interface CategoryRepository extends JpaRepository<Category, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Category> {
 
     List<Category> findByNameContainingIgnoreCase(String name);
+    boolean existsByNameIgnoreCase(String name);
+    boolean existsByNameIgnoreCaseAndIdNot(String name, long id);
     /** Names of the categories that list the brand (category_brands); these rows block deleting it. */
     @org.springframework.data.jpa.repository.Query("select c.name from Category c join c.brands b where b.id = :id order by c.name")
     List<String> namesByBrand(@org.springframework.data.repository.query.Param("id") long id);

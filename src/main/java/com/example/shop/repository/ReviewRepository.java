@@ -23,6 +23,9 @@ public interface ReviewRepository extends JpaRepository<Review, Long>, org.sprin
     @Query("select r from Review r where r.rating >= 4 and r.product.active = true and r.product.technologyCatalog = true order by r.id desc")
     List<Review> featured(org.springframework.data.domain.Pageable page);
     interface Summary {long getCount();Double getAverage();}
+    /** Count and average per product in one query, so a page of cards costs one extra round trip. */
+    @Query("select r.product.id, count(r), avg(r.rating) from Review r where r.product.id in :ids group by r.product.id")
+    List<Object[]> ratingsFor(@Param("ids") java.util.Collection<Long> ids);
     @Query("select count(r) as count, coalesce(avg(r.rating),0.0) as average from Review r where r.product.id=:productId")
     Summary summarize(@Param("productId") long productId);
 

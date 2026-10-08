@@ -24,16 +24,16 @@ public class BannerAdminService {
     public Page<?> list(int page,int size,String search,Map<String,String> filters) {
         var paging=page(page,size,search);
         String type="banners";
-return banners.findAll(matching(search,type,filters,"name"),paging).map(b -> map("id",b.getId(),"name",b.getName(),"imageUrl",b.getImageUrl(),"link",b.getLink(),"active",b.isActive(),"technologyCatalog",b.isTechnologyCatalog()));
+return banners.findAll(matching(search,type,filters,"name"),paging).map(b -> map("id",b.getId(),"name",b.getName(),"imageUrl",b.getImageUrl(),"link",b.getLink(),"active",b.isActive(),"technologyCatalog",b.isTechnologyCatalog(),"placement",b.getPlacement()));
     }
     @Transactional(readOnly = true)
     public Object detail(long id) {
         String type="banners";
-var b=banners.findById(id).orElseThrow(() -> missing(type,id));return map("id",b.getId(),"name",b.getName(),"imageUrl",b.getImageUrl(),"link",b.getLink(),"active",b.isActive(),"technologyCatalog",b.isTechnologyCatalog());
+var b=banners.findById(id).orElseThrow(() -> missing(type,id));return map("id",b.getId(),"name",b.getName(),"imageUrl",b.getImageUrl(),"link",b.getLink(),"active",b.isActive(),"technologyCatalog",b.isTechnologyCatalog(),"placement",b.getPlacement());
     }
     public Map<String,Object> save(Long id,BannerInput n,String currentEmail) {
         String type="banners";
-var b=id==null?new Banner():banners.findById(id).orElseThrow(() -> missing(type,id));b.setTechnologyCatalog(enabled(n.technologyCatalog()));b.setName(n.name().trim());b.setImageUrl(url(n.imageUrl().trim()));b.setLink(url(n.link()==null?"/products":n.link()));b.setActive(enabled(n.active()));return map("id",banners.save(b).getId());
+var b=id==null?new Banner():banners.findById(id).orElseThrow(() -> missing(type,id));b.setTechnologyCatalog(enabled(n.technologyCatalog()));b.setName(n.name().trim());b.setImageUrl(url(n.imageUrl().trim()));b.setLink(url(n.link()==null?"/products":n.link()));b.setActive(enabled(n.active()));b.setPlacement(n.placement());return map("id",banners.save(b).getId());
     }
     public void delete(long id,String currentEmail) {
         String type="banners";

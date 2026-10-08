@@ -1,6 +1,7 @@
 package com.example.shop.api.dto.admin;
 
 import jakarta.validation.Valid;
+import com.example.shop.domain.BannerPlacement;
 import jakarta.validation.constraints.*;
 import java.util.List;
 import java.util.Map;
@@ -10,5 +11,6 @@ public record BannerInput(
         @NotBlank @Size(max = 500) String imageUrl,
         @Size(max = 500) String link,
         Boolean active,
-        Boolean technologyCatalog) {
+        Boolean technologyCatalog,
+        BannerPlacement placement) {
 }

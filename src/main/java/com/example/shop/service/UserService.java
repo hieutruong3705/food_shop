@@ -103,6 +103,30 @@ public class UserService {
         return new VerificationIssue(user.getId(), user.getEmail(), user.getFullName(), code);
     }
 
+    /**
+     * Signs in a Google account: links it to the existing local user with the same address, or creates
+     * one. Google has already proven the address belongs to the caller, so no verification mail is sent.
+     * The local password is left untouched for an existing account and set to an unusable random value
+     * for a new one, so a Google-only account cannot be taken over through the password form.
+     */
+    @Transactional
+    public User loginWithGoogle(String email, String fullName) {
+        User user = userRepository.existsByEmail(email) ? userRepository.lockByEmail(email) : null;
+        if (user == null) {
+            user = new User();
+            user.setEmail(email);
+            user.setRole(roleRepository.findByName("USER"));
+            user.setFullName(fullName == null || fullName.isBlank() ? email : fullName);
+            user.setPassword(passwordEncoder.encode(Tokens.newToken()));
+        }
+        if (user.getIsLocked()) throw new IllegalStateException("Tài khoản đã bị khóa");
+        user.setEnabled(true);
+        user.setVerificationCode(null);
+        user.setVerificationExpiresAt(null);
+        user.setVerificationSentAt(null);
+        return userRepository.save(user);
+    }
+
     /** An account created by registration that has not been verified. Admin-disabled accounts have no code. */
     private static boolean isPendingRegistration(User user) {
         return !user.isEnabled() && !user.getIsLocked() && user.getVerificationCode() != null;
@@ -159,7 +183,7 @@ public class UserService {
                 + "TechShop Team.";
 
         MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message);
+        MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
 
         helper.setFrom(fromAddress, senderName);
         helper.setTo(toAddress);
@@ -225,7 +249,7 @@ public class UserService {
     // 4. Gửi email chứa link reset password
     public void sendEmail(String recipientEmail, String link) throws MessagingException, UnsupportedEncodingException {
         MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message);
+        MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
 
         helper.setFrom(mailFrom, "TechShop Support");
         helper.setTo(recipientEmail);

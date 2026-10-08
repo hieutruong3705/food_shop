@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.IOException;
 import java.text.NumberFormat;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
@@ -57,12 +59,10 @@ public class InvoiceService {
             document.add(new Paragraph("Số điện thoại: " + order.getReceiverPhone(), fontInfo));
             document.add(new Paragraph("Địa chỉ: " + order.getReceiverAddress(), fontInfo));
 
-            // Format ngày tháng (Java 8 time)
+            // Ngày đặt in theo giờ Việt Nam, dạng ngày/tháng/năm giờ:phút
             if (order.getCreatedAt() != null) {
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-                // Chuyển đổi tùy theo kiểu dữ liệu của bạn (Instant hay LocalDateTime)
-                // Ở đây dùng toString() cho an toàn, bạn có thể chỉnh lại format sau
-                document.add(new Paragraph("Ngày đặt: " + order.getCreatedAt().toString(), fontInfo));
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
+                document.add(new Paragraph("Ngày đặt: " + formatter.format(Instant.ofEpochMilli(order.getCreatedAt().getTime())), fontInfo));
             }
             document.add(new Paragraph("\n"));
 
@@ -100,6 +100,20 @@ public class InvoiceService {
 
             // === 4. TỔNG TIỀN ===
             document.add(new Paragraph("\n"));
+            // Khi đơn có phí giao hàng hoặc giảm giá thì in thêm các dòng trung gian,
+            // để người đọc cộng các dòng hàng ra đúng tổng thanh toán.
+            double shipping = order.getShippingFee() == null ? 0 : order.getShippingFee();
+            double discount = order.getDiscountAmount() == null ? 0 : order.getDiscountAmount();
+            if (shipping > 0 || discount > 0) {
+                addAmountLine(document, "Tạm tính: " + currencyVN.format(total), fontInfo);
+            }
+            if (shipping > 0) {
+                addAmountLine(document, "Phí giao hàng: " + currencyVN.format(shipping), fontInfo);
+            }
+            if (discount > 0) {
+                String voucher = order.getVoucherCode() == null || order.getVoucherCode().isBlank() ? "" : " (mã " + order.getVoucherCode() + ")";
+                addAmountLine(document, "Giảm giá" + voucher + ": -" + currencyVN.format(discount), fontInfo);
+            }
             Paragraph totalParam = new Paragraph("Tổng cộng: " + currencyVN.format(order.getTotalPrice()), fontHeader);
             totalParam.setAlignment(Paragraph.ALIGN_RIGHT);
             document.add(totalParam);
@@ -109,6 +123,12 @@ public class InvoiceService {
         } catch (Exception e) {
             throw new IllegalStateException("Không thể xuất hóa đơn", e);
         }
+    }
+
+    private void addAmountLine(Document document, String text, Font font) throws DocumentException {
+        Paragraph line = new Paragraph(text, font);
+        line.setAlignment(Paragraph.ALIGN_RIGHT);
+        document.add(line);
     }
 
     private void addCellToTable(PdfPTable table, String text, Font font) {

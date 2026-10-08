@@ -52,6 +52,7 @@ return voucher(vouchers.findById(id).orElseThrow(() -> missing(type,id)));
                 if(present.contains("minimumOrder"))v.setMinimumOrder(n.minimumOrder());
                 if(present.contains("maximumDiscount"))v.setMaximumDiscount(n.maximumDiscount()==null?null:(double)n.maximumDiscount());
                 if(present.contains("usageLimit"))v.setUsageLimit(n.usageLimit()==null?null:n.usageLimit());
+                if(present.contains("imageUrl"))v.setImageUrl(url(optional(n.imageUrl())));
                 v.setCode(code);v.setDiscount(n.discount());offerScopes.apply(v,n,true);return map("id",vouchers.save(v).getId());
     }
     public void deleteVoucher(long id) { vouchers.deleteById(id); }
@@ -69,7 +70,7 @@ return promotion(promotions.findById(id).orElseThrow(() -> missing(type,id)));
     public Map<String,Object> savePromotion(Long id,PromotionInput n) {
         String type="promotions";
 
-                var p=id==null?new Promotion():promotions.findById(id).orElseThrow(() -> missing(type,id));p.setName(n.name().trim());p.setDescription(optional(n.description()));p.setDiscountRate(n.discountRate());
+                var p=id==null?new Promotion():promotions.findById(id).orElseThrow(() -> missing(type,id));p.setName(n.name().trim());p.setDescription(optional(n.description()));p.setImageUrl(url(optional(n.imageUrl())));p.setDiscountRate(n.discountRate());
                 p.setStartDate(date(n.startDate()));p.setEndDate(date(n.endDate()));if(!p.getEndDate().after(p.getStartDate()))throw new IllegalArgumentException("Ngày kết thúc phải sau ngày bắt đầu");
                 p.setActive(enabled(n.active()));offerScopes.apply(p,n,false);var saved=promotions.save(p);
                 return map("id",saved.getId(),"warnings",overlaps(saved));
@@ -97,7 +98,7 @@ return promotion(promotions.findById(id).orElseThrow(() -> missing(type,id)));
         base.put("scopeType",offer.getScopeType());base.put("scopeDescription",OfferScopeText.describe(offer));base.put("categoryIds",offer.getCategories().stream().map(Category::getId).toList());
         base.put("brandIds",offer.getBrands().stream().map(Brand::getId).toList());base.put("productIds",offer.getProducts().stream().map(Product::getId).toList());return base;
     }
-    private Map<String,Object> voucher(Voucher v){return offerView(v,map("id",v.getId(),"code",v.getCode(),"discount",v.getDiscount(),"all",v.isAll(),"active",v.isActive(),"startDate",v.getStartDate(),"endDate",v.getEndDate(),"minimumOrder",v.getMinimumOrder(),"maximumDiscount",v.getMaximumDiscount(),"usageLimit",v.getUsageLimit(),"usedCount",v.getUsedCount()));}
-    private Map<String,Object> promotion(Promotion p){return offerView(p,map("id",p.getId(),"name",p.getName(),"description",p.getDescription(),"discountRate",p.getDiscountRate(),"startDate",p.getStartDate(),"endDate",p.getEndDate(),"active",p.isActive()));}
+    private Map<String,Object> voucher(Voucher v){return offerView(v,map("id",v.getId(),"code",v.getCode(),"discount",v.getDiscount(),"imageUrl",optional(v.getImageUrl()),"all",v.isAll(),"active",v.isActive(),"startDate",v.getStartDate(),"endDate",v.getEndDate(),"minimumOrder",v.getMinimumOrder(),"maximumDiscount",v.getMaximumDiscount(),"usageLimit",v.getUsageLimit(),"usedCount",v.getUsedCount()));}
+    private Map<String,Object> promotion(Promotion p){return offerView(p,map("id",p.getId(),"name",p.getName(),"description",p.getDescription(),"imageUrl",optional(p.getImageUrl()),"discountRate",p.getDiscountRate(),"startDate",p.getStartDate(),"endDate",p.getEndDate(),"active",p.isActive()));}
 
 }

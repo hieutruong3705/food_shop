@@ -37,6 +37,9 @@ public class Voucher implements Serializable,ScopedOffer {
 
     private String code;
     private double discount;
+    @jakarta.persistence.Column(length=500) private String imageUrl;
+    public String getImageUrl(){return imageUrl;}
+    public void setImageUrl(String value){imageUrl=value;}
     @org.hibernate.annotations.ColumnDefault("true")
     @jakarta.persistence.Column(nullable=false) private boolean active = true;
     private java.util.Date startDate;

@@ -72,6 +72,14 @@ class AdminApiTests {
         mvc.perform(get("/api/v1/catalog/facets").param("categoryId","999999999"))
             .andExpect(status().isBadRequest());
     }
+    @Test void categoryNamesAreUniqueWhateverTheCase()throws Exception{
+        String key=UUID.randomUUID().toString();long first=create("categories",Map.of("name","Category "+key));long other=create("categories",Map.of("name","Other "+key));
+        var same=json.writeValueAsString(Map.of("name"," category "+key.toUpperCase()+" "));
+        mvc.perform(post("/api/v1/admin/categories").with(user(email).roles("ADMIN")).with(csrf()).contentType("application/json").content(same)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("đã tồn tại")));
+        mvc.perform(put("/api/v1/admin/categories/"+other).with(user(email).roles("ADMIN")).with(csrf()).contentType("application/json").content(same)).andExpect(status().isBadRequest());
+        // Saving a category under its own name is not a clash.
+        mvc.perform(put("/api/v1/admin/categories/"+first).with(user(email).roles("ADMIN")).with(csrf()).contentType("application/json").content(json.writeValueAsString(Map.of("name","Category "+key,"description","Mô tả mới")))).andExpect(status().isOk());
+    }
     @Test void variantsRoundTripAndValidateOptions()throws Exception{
         String key=UUID.randomUUID().toString();long cat=create("categories",Map.of("name",key));long brand=create("brands",Map.of("name",key));
         var request=new HashMap<String,Object>();request.put("name","Variant test");request.put("sku",key);request.put("slug",key);request.put("price",0);request.put("quantity",0);request.put("warrantyMonths",12);request.put("categoryId",cat);request.put("brandId",brand);

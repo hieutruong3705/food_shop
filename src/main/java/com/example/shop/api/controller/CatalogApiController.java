@@ -53,9 +53,10 @@ public class CatalogApiController {
     public List<Map<String, Object>> categories() {
         return service.categories();
     }
+    /** Without a placement this answers the home hero banners, exactly as before. */
     @GetMapping("/banners")
-    public List<Map<String, Object>> banners() {
-        return service.banners();
+    public List<Map<String, Object>> banners(@RequestParam(required=false) com.example.shop.domain.BannerPlacement placement) {
+        return service.banners(placement);
     }
 
 }

@@ -39,7 +39,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, org.spr
     @Query("SELECT new com.example.shop.domain.dto.TopProductDTO(" +
             "p.id, " +
             "p.name, " +
-            "(SELECT MIN(img.imageUrl) FROM ProductImage img WHERE img.product.id = p.id), " +
+            "(SELECT img.imageUrl FROM ProductImage img WHERE img.id = (SELECT MIN(first.id) FROM ProductImage first WHERE first.product.id = p.id)), " +
             "SUM(od.quantity), " +
             "SUM(od.price * od.quantity), " +
             "p.active) " +

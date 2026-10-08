@@ -85,6 +85,46 @@ class PaymentApiTests {
         age(orderId,25);payments.expire(orderId);payments.ipn(callback("00",200000000));
         assertThatThrownBy(()->commerce.archive(buyer.getEmail(),orderId,true)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("hoàn tiền");
     }
+    @Test void returnCallbackReportsOrderStateWithoutChangingIt()throws Exception{
+        var signed=callback("00",200000000,Map.of("vnp_TransactionNo","4242","vnp_BankCode","NCB"));
+        var view=payments.verifyReturn(signed);
+        assertThat(view.valid()).isTrue();assertThat(view.orderId()).isEqualTo(orderId);
+        assertThat(view.responseCode()).isEqualTo("00");assertThat(view.transactionStatus()).isEqualTo("00");
+        assertThat(view.amount()).isEqualTo(2000000);assertThat(view.bankCode()).isEqualTo("NCB");
+        assertThat(view.transactionNo()).isEqualTo("4242");assertThat(view.message()).isEqualTo("Giao dịch thành công");
+        assertThat(view.orderStatus()).isEqualTo("PENDING");assertThat(view.paymentStatus()).isEqualTo("UNPAID");
+        assertThat(view.paymentReference()).isNull();assertThat(view.refundRequired()).isFalse();
+        var order=orders.findById(orderId).orElseThrow();
+        assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.UNPAID);assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(order.getPaymentReference()).isNull();assertThat(stock()).isEqualTo(1);
+    }
+    /** The payer may land on the return page without a session, so it must read everything from the signed callback. */
+    @Test void returnCallbackCarriesTheRefundFlagAndReferenceAfterALateIpn()throws Exception{
+        age(orderId,25);payments.expire(orderId);
+        var late=callback("00",200000000,Map.of("vnp_TransactionNo","5150"));
+        assertThat(payments.ipn(late).get("RspCode")).isEqualTo("00");
+        var view=payments.verifyReturn(late);
+        assertThat(view.valid()).isTrue();assertThat(view.refundRequired()).isTrue();
+        assertThat(view.paymentReference()).isEqualTo("5150");assertThat(view.paymentStatus()).isEqualTo("REFUND_REQUIRED");
+        assertThat(view.orderStatus()).isEqualTo("CANCELLED");
+    }
+    @Test void returnCallbackWithABrokenSignatureRevealsNothing()throws Exception{
+        var forged=new TreeMap<>(callback("00",200000000));forged.put("vnp_Amount","1");
+        for(var attempt:List.of(forged,Map.of("vnp_TxnRef",Long.toString(orderId),"vnp_ResponseCode","00","vnp_SecureHash","0".repeat(128)),Map.<String,String>of())){
+            var view=payments.verifyReturn(attempt);
+            assertThat(view.valid()).isFalse();assertThat(view.orderId()).isNull();assertThat(view.paymentStatus()).isNull();
+            assertThat(view.responseCode()).isNull();assertThat(view.message()).isEqualTo("Không xác thực được kết quả thanh toán");
+        }
+    }
+    @Test void paymentStatusExposesTheCheckoutWindowUntilThePaymentLands()throws Exception{
+        var view=payments.status(orders.findById(orderId).orElseThrow());
+        assertThat(view.orderStatus()).isEqualTo("PENDING");assertThat(view.paymentStatus()).isEqualTo("UNPAID");
+        assertThat(view.paymentReference()).isNull();assertThat(view.refundRequired()).isFalse();
+        assertThat(java.time.Instant.parse(view.expiresAt())).isEqualTo(orders.findById(orderId).orElseThrow().getCreatedAt().toInstant().plusSeconds(900));
+        payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","777")));
+        var paid=payments.status(orders.findById(orderId).orElseThrow());
+        assertThat(paid.paymentStatus()).isEqualTo("PAID");assertThat(paid.paymentReference()).isEqualTo("777");assertThat(paid.expiresAt()).isNull();
+    }
     @Test void ordinaryPaymentStoresTheVnpayTransactionNumber()throws Exception{
         assertThat(payments.ipn(callback("00",200000000,Map.of("vnp_TransactionNo","999"))).get("RspCode")).isEqualTo("00");
         var order=orders.findById(orderId).orElseThrow();

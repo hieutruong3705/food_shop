@@ -10,6 +10,11 @@ public class Banner {
     public boolean isTechnologyCatalog(){return technologyCatalog;}
     public void setTechnologyCatalog(boolean value){technologyCatalog=value;}
 
+    @Enumerated(EnumType.STRING) @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
+    @Column(nullable=false,length=20) private BannerPlacement placement=BannerPlacement.HOME_HERO;
+    public BannerPlacement getPlacement(){return placement;}
+    public void setPlacement(BannerPlacement value){placement=value==null?BannerPlacement.HOME_HERO:value;}
+
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

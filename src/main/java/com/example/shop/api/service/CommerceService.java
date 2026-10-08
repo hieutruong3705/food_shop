@@ -96,8 +96,10 @@ public class CommerceService {
         if(voucher!=null && subtotal.compareTo(BigDecimal.valueOf(voucher.getMinimumOrder()))<0)throw new IllegalArgumentException("Đơn hàng chưa đạt giá trị tối thiểu của voucher");
         BigDecimal discount=voucher==null?BigDecimal.ZERO:eligible.multiply(BigDecimal.valueOf(voucher.getDiscount())).divide(BigDecimal.valueOf(100),0,RoundingMode.HALF_UP);
         if(voucher!=null && voucher.getMaximumDiscount()!=null)discount=discount.min(BigDecimal.valueOf(voucher.getMaximumDiscount()));
-        double shipping=subtotal.compareTo(BigDecimal.valueOf(1000000))>=0?0:30000;
-        return new Quote(subtotal.doubleValue(),shipping,discount.doubleValue(),subtotal.subtract(discount).add(BigDecimal.valueOf(shipping)).doubleValue(),voucher==null?"":voucher.getCode());
+        // The shop no longer charges for delivery. The field stays on the quote and the order so
+        // invoices and orders placed under the old 30,000 fee still report what was actually taken.
+        double shipping=0;
+        return new Quote(subtotal.doubleValue(),shipping,discount.doubleValue(),subtotal.subtract(discount).doubleValue(),voucher==null?"":voucher.getCode());
     }
     public CartView add(String email, AddItem input) {
         Cart c=cart(userForWrite(email));
@@ -162,6 +164,8 @@ public class CommerceService {
     public List<OrderView> list(String email) { return orders.findByUserOrderByIdDesc(userForRead(email)).stream().map(CommerceResponse::order).toList(); }
     /** Loads the order with its row lock, for callers that change it. */
     public Order requireOrder(String email,long id,boolean admin) { return findOrder(email,id,admin,true); }
+    /** Loads the order without a lock, for callers that only read its scalar fields. */
+    @Transactional(readOnly=true) public Order readOrder(String email,long id,boolean admin) { return findOrder(email,id,admin,false); }
     private Order findOrder(String email,long id,boolean admin,boolean lock) {
         User u=lock?userForWrite(email):userForRead(email);
         Order o=(lock?orders.lockById(id):orders.findById(id)).orElseThrow(() -> missing("Đơn hàng",id));

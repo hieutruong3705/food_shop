@@ -36,6 +36,7 @@ public class ApiExceptionHandler {
     @ExceptionHandler({org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
         NumberFormatException.class,
         org.springframework.web.bind.MissingServletRequestParameterException.class,
+        org.springframework.web.bind.MissingRequestHeaderException.class,
         org.springframework.web.multipart.support.MissingServletRequestPartException.class})
     public ResponseEntity<Map<String,Object>> invalidParameter(Exception exception) {
         return error(HttpStatus.BAD_REQUEST, "Tham số yêu cầu không hợp lệ hoặc còn thiếu", Map.of());

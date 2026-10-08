@@ -25,6 +25,9 @@ public class Promotion implements Serializable,ScopedOffer {
 
     private String name;
     @Column(columnDefinition="TEXT") private String description;
+    @Column(length=500) private String imageUrl;
+    public String getImageUrl(){return imageUrl;}
+    public void setImageUrl(String value){imageUrl=value;}
 
     private double discountRate;
 

@@ -48,7 +48,9 @@ var c=categories.findById(id).orElseThrow(() -> missing(type,id));return map("id
         String type="categories";
 
                 var c=id==null?new Category():categories.lockById(id).orElseThrow(() -> missing(type,id));
-                c.setName(n.name().trim());c.setDescription(optional(n.description()));c.setImage(url(optional(n.image())));
+                String name=n.name().trim();
+                if(id==null?categories.existsByNameIgnoreCase(name):categories.existsByNameIgnoreCaseAndIdNot(name,id))throw new IllegalArgumentException("Danh mục \""+name+"\" đã tồn tại");
+                c.setName(name);c.setDescription(optional(n.description()));c.setImage(url(optional(n.image())));
                 if(n.brandIds()!=null){
                     var selected=selectedBrands(n.brandIds());
                     if(id!=null&&products.count((root,q,cb)->cb.and(cb.equal(root.get("category").get("id"),id),selected.isEmpty()?cb.isNotNull(root.get("brand")):cb.not(root.get("brand").get("id").in(selected.stream().map(Brand::getId).toList()))))>0)

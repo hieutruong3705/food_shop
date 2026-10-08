@@ -8,6 +8,7 @@ import java.util.Map;
 public record VoucherInput(
         @NotBlank @Size(max = 50) String code,
         @NotNull @DecimalMin("1") @DecimalMax("100") Double discount,
+        @Size(max = 500) String imageUrl,
         Boolean active,
         String startDate,
         String endDate,
