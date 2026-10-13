@@ -160,4 +160,43 @@ cd ..
 
 Docker Compose tạo môi trường demo MySQL riêng, backend và frontend cùng origin. Sao chép `.env.example` thành `.env`, đặt mật khẩu database và demo rồi chạy `docker compose up --build`. Mở http://localhost:8080. Không dùng mật khẩu demo hay profile `dev` trên production.
 
-Chưa tự triển khai lên dịch vụ bên ngoài. Trạng thái kiểm chứng và giới hạn còn lại được ghi tại [docs/MIGRATION.md](docs/MIGRATION.md).
+Trạng thái kiểm chứng và giới hạn còn lại được ghi tại [docs/MIGRATION.md](docs/MIGRATION.md).
+
+## Đưa lên máy chủ bằng Docker
+
+`compose.prod.yaml` chạy ba container trên một máy chủ Linux: Caddy (tự xin và gia hạn chứng chỉ HTTPS cho tên miền), ứng dụng và MySQL. Ứng dụng chạy profile mặc định (không `dev`), chỉ Caddy mở cổng 80/443 ra ngoài. Dữ liệu nằm trong volume nên giữ nguyên khi build lại hoặc khởi động lại:
+
+| Volume | Nội dung |
+|---|---|
+| `techshop_mysql-data` | Database MySQL |
+| `techshop_app-data` | Ảnh upload (`/app/data/uploads`) |
+| `techshop_caddy-data`, `techshop_caddy-config` | Chứng chỉ HTTPS và trạng thái của Caddy |
+
+Trước khi chạy: bản ghi A của tên miền (và `www`) trỏ về IP máy chủ, tường lửa mở cổng 80 và 443.
+
+Trên máy đang có dữ liệu, đóng gói phần Git không chứa (database, ảnh upload, khóa cấu hình) rồi chép lên máy chủ:
+
+```powershell
+.\scripts\export-cloud-data.ps1                  # mặc định -Domain techshop.work.gd
+scp data\cloud\techshop-cloud-data.tar.gz <user>@<máy-chủ>:~
+```
+
+Gói gồm `.env` (tên miền và mật khẩu MySQL sinh ngẫu nhiên, giữ nguyên ở các lần xuất sau), `seed/mysql/techshop.sql`, `seed/app/uploads.tar.gz` và `config/application.properties` (ghép từ `data/chat|vnpay|mail|oauth-local.properties`). Gói chứa mật khẩu và dữ liệu khách hàng, không đưa vào Git.
+
+Trên máy chủ:
+
+```bash
+curl -fsSL https://get.docker.com | sh           # nếu chưa có Docker
+git clone <địa-chỉ-repo> /opt/techshop && cd /opt/techshop
+tar -xzf ~/techshop-cloud-data.tar.gz --no-same-permissions
+docker compose up -d --build                     # .env đã đặt COMPOSE_FILE=compose.prod.yaml
+docker compose ps
+```
+
+Lần khởi động đầu, MySQL nhập `seed/mysql/techshop.sql` và ứng dụng giải nén ảnh upload vào volume. Hai tệp seed chỉ được đọc khi volume còn trống, nên các lần sau không ghi đè dữ liệu đang chạy. Cập nhật mã nguồn: `git pull && docker compose up -d --build`. `docker compose down` giữ volume; `docker compose down -v` xóa toàn bộ dữ liệu.
+
+Sau khi có tên miền:
+
+- Đăng nhập Google: thêm `https://<tên-miền>/login/oauth2/code/google` vào Authorized redirect URIs trong Google Cloud Console.
+- VNPay: URL trả về tự đổi thành `https://<tên-miền>/payment-return`. Có thể khai báo IPN `https://<tên-miền>/api/v1/payments/vnpay/ipn` trong cổng merchant sandbox để đơn tự chuyển "Đã thanh toán".
+- Đổi khóa mail/VNPay/chat/Google: sửa `config/application.properties` trên máy chủ rồi `docker compose restart app`.

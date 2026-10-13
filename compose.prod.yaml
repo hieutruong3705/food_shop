@@ -1,0 +1,75 @@
+# Cloud stack for one server: Caddy (HTTPS for DOMAIN) -> app -> MySQL.
+# Needs next to this file: .env, seed/ and config/ from scripts/export-cloud-data.ps1.
+name: techshop
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    # Promotion windows are stored and compared as Vietnam wall-clock time.
+    command: ["--default-time-zone=+07:00"]
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      MYSQL_DATABASE: techshop
+      MYSQL_USER: techshop
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # seed/mysql/*.sql is imported once, while mysql-data is still empty.
+      - ./seed/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Over TCP on purpose: the import runs on a socket-only server, so the app waits until it has finished.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--protocol=tcp"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+  app:
+    build: .
+    image: techshop:latest
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      DB_URL: jdbc:mysql://mysql:3306/techshop?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Ho_Chi_Minh&allowPublicKeyRetrieval=true&useSSL=false
+      DB_USERNAME: techshop
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      CLIENT_URL: https://${DOMAIN:?Set DOMAIN in .env}
+      COOKIE_SECURE: "true"
+      # Caddy is the only way in: trust its X-Forwarded-* so the app sees https and each visitor's own address.
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      # Wins over a localhost return URL copied from data/vnpay-local.properties.
+      SHOP_VNPAY_RETURN_URL: https://${DOMAIN}/payment-return
+    volumes:
+      # Uploaded images; filled from seed/app/uploads.tar.gz on the first start.
+      - app-data:/app/data
+      - ./seed/app:/seed:ro
+      # config/application.properties: mail, VNPay, chat and Google keys. Spring reads ./config by itself.
+      - ./config:/app/config:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates live here; losing the volume means asking for new ones.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+volumes:
+  mysql-data:
+  app-data:
+  caddy-data:
+  caddy-config:

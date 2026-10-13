@@ -42,3 +42,5 @@ replay_pid*.log
 
 # Local Spring config overrides (not shared)
 /config/
+# Cloud data bundle unpacked next to compose.prod.yaml (database dump, uploads)
+/seed/

@@ -16,6 +16,7 @@ FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 RUN addgroup -S techshop && adduser -S techshop -G techshop && mkdir /app/data && chown techshop:techshop /app/data
 COPY --from=backend /app/target/techshop.jar /app/techshop.jar
+COPY deploy/entrypoint.sh /app/entrypoint.sh
 USER techshop
 EXPOSE 8080
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/techshop.jar"]
+ENTRYPOINT ["sh", "/app/entrypoint.sh"]

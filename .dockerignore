@@ -3,6 +3,8 @@ legacy
 .codex
 .agents
 data
+seed
+config
 target
 frontend/node_modules
 frontend/dist
